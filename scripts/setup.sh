@@ -108,7 +108,6 @@ sleep 5
 
 # Run database migrations
 print_status "Running database migrations..."
-python create_tables.py
 alembic upgrade head
 
 # Create S3 bucket in LocalStack

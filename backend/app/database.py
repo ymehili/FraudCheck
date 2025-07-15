@@ -4,6 +4,9 @@ from app.core.config import settings
 
 Base = declarative_base()
 
+# Import models to ensure they are registered with the Base
+from app.models import *  # noqa
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
