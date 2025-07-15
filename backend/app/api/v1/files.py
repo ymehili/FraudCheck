@@ -88,7 +88,7 @@ async def list_files(
     total = len(count_result.scalars().all())
     
     return FileListResponse(
-        files=[FileResponse.from_orm(file) for file in files],
+        files=[FileResponse.model_validate(file) for file in files],
         total=total,
         page=page,
         per_page=per_page
@@ -115,7 +115,7 @@ async def get_file(
             detail="File not found"
         )
     
-    return FileResponse.from_orm(file_record)
+    return FileResponse.model_validate(file_record)
 
 @router.delete("/{file_id}")
 async def delete_file(

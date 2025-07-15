@@ -39,11 +39,18 @@ class TestAuth:
         test_user_data
     ):
         """Test getting current user with valid authentication."""
+        from datetime import datetime
+        
         # Mock the token verification
         mock_verify_token.return_value = test_user_data
         
-        # Mock the user retrieval
-        mock_user = User(**test_user_data)
+        # Mock the user retrieval - create user with proper structure
+        mock_user = User(
+            id=test_user_data["id"],  # Changed from user_id to id
+            email=test_user_data["email"],
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
         mock_get_or_create_user.return_value = mock_user
         
         response = client.get(
@@ -53,7 +60,7 @@ class TestAuth:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["id"] == test_user_data["id"]
+        assert data["id"] == test_user_data["id"]  # Changed from user_id to id
         assert data["email"] == test_user_data["email"]
 
     @patch('app.api.deps.verify_clerk_token')
@@ -87,7 +94,10 @@ class TestAuth:
         mock_verify_token.return_value = test_user_data
         
         # Mock the user retrieval
-        mock_user = User(**test_user_data)
+        mock_user = User(
+            id=test_user_data["id"],  # Changed from user_id to id  
+            email=test_user_data["email"]
+        )
         mock_get_or_create_user.return_value = mock_user
         
         response = client.post(
@@ -110,7 +120,10 @@ class TestAuth:
         from app.api.deps import get_or_create_user
         
         # Create user in database
-        user = User(**test_user_data)
+        user = User(
+            id=test_user_data["id"],  # Changed from user_id to id
+            email=test_user_data["email"]
+        )
         db_session.add(user)
         await db_session.commit()
         
@@ -144,7 +157,7 @@ class TestAuth:
         from app.api.deps import get_or_create_user
         from fastapi import HTTPException
         
-        # Test with missing user_id
+        # Test with missing user_id/id
         with pytest.raises(HTTPException) as exc_info:
             await get_or_create_user(db_session, {"email": "test@example.com"})
         
@@ -153,7 +166,7 @@ class TestAuth:
         
         # Test with missing email
         with pytest.raises(HTTPException) as exc_info:
-            await get_or_create_user(db_session, {"user_id": "test-id"})
+            await get_or_create_user(db_session, {"id": "test-id"})
         
         assert exc_info.value.status_code == 400
         assert "Invalid user data" in str(exc_info.value.detail)

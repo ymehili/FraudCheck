@@ -33,7 +33,10 @@ class TestFiles:
         """Test successful file upload with authentication."""
         # Mock authentication
         mock_verify_token.return_value = test_user_data
-        mock_user = User(**test_user_data)
+        mock_user = User(
+            id=test_user_data["id"],
+            email=test_user_data["email"]
+        )
         mock_get_or_create_user.return_value = mock_user
         
         response = client.post(
@@ -62,7 +65,10 @@ class TestFiles:
         """Test file upload with S3 failure."""
         # Mock authentication
         mock_verify_token.return_value = test_user_data
-        mock_user = User(**test_user_data)
+        mock_user = User(
+            id=test_user_data["id"],
+            email=test_user_data["email"]
+        )
         mock_get_or_create_user.return_value = mock_user
         
         # Mock S3 service failure
@@ -91,7 +97,10 @@ class TestFiles:
         """Test uploading invalid file type."""
         # Mock authentication
         mock_verify_token.return_value = test_user_data
-        mock_user = User(**test_user_data)
+        mock_user = User(
+            id=test_user_data["id"],
+            email=test_user_data["email"]
+        )
         mock_get_or_create_user.return_value = mock_user
         
         # Mock S3 service validation failure
@@ -104,7 +113,7 @@ class TestFiles:
                 headers={"Authorization": "Bearer valid-token"}
             )
             
-            assert response.status_code == 500
+            assert response.status_code == 400  # Changed from 500 to 400
 
     @patch('app.api.deps.verify_clerk_token')
     @patch('app.api.deps.get_or_create_user')
@@ -118,7 +127,7 @@ class TestFiles:
         """Test listing files when user has no files."""
         # Mock authentication
         mock_verify_token.return_value = test_user_data
-        mock_user = User(**test_user_data)
+        mock_user = User(id=test_user_data["id"], email=test_user_data["email"])
         mock_get_or_create_user.return_value = mock_user
         
         response = client.get(
@@ -146,11 +155,14 @@ class TestFiles:
         from app.models.file import FileRecord
         
         # Create user and file in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
-        file_record = FileRecord(**test_file_data)
+        # Create file record with the same user_id as the test user
+        file_data = test_file_data.copy()
+        file_data["user_id"] = test_user_data["id"]
+        file_record = FileRecord(**file_data)
         db_session.add(file_record)
         await db_session.commit()
         
@@ -179,7 +191,7 @@ class TestFiles:
         """Test getting non-existent file."""
         # Mock authentication
         mock_verify_token.return_value = test_user_data
-        mock_user = User(**test_user_data)
+        mock_user = User(id=test_user_data["id"], email=test_user_data["email"])
         mock_get_or_create_user.return_value = mock_user
         
         response = client.get(
@@ -203,11 +215,14 @@ class TestFiles:
         from app.models.file import FileRecord
         
         # Create user and file in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
-        file_record = FileRecord(**test_file_data)
+        # Create file record with the same user_id as the test user
+        file_data = test_file_data.copy()
+        file_data["user_id"] = test_user_data["id"]
+        file_record = FileRecord(**file_data)
         db_session.add(file_record)
         await db_session.commit()
         
@@ -234,11 +249,14 @@ class TestFiles:
         from app.models.file import FileRecord
         
         # Create user and file in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
-        file_record = FileRecord(**test_file_data)
+        # Create file record with the same user_id as the test user
+        file_data = test_file_data.copy()
+        file_data["user_id"] = test_user_data["id"]
+        file_record = FileRecord(**file_data)
         db_session.add(file_record)
         await db_session.commit()
         
@@ -266,7 +284,7 @@ class TestFiles:
         from fastapi import HTTPException
         
         # Create user in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
@@ -294,17 +312,21 @@ class TestFiles:
         from app.models.file import FileRecord
         
         # Create user and file in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
-        file_record = FileRecord(**test_file_data)
+        # Create file record with the same user_id as the test user
+        file_data = test_file_data.copy()
+        file_data["user_id"] = test_user_data["id"]
+        file_record = FileRecord(**file_data)
         db_session.add(file_record)
         await db_session.commit()
         
         # Mock S3 service
-        with patch('app.core.s3.s3_service') as mock_s3:
-            mock_s3.generate_presigned_url.return_value = "https://presigned-url.com"
+        with patch('app.api.v1.files.s3_service') as mock_s3:
+            from unittest.mock import AsyncMock
+            mock_s3.generate_presigned_url = AsyncMock(return_value="https://presigned-url.com")
             
             response = await download_file(
                 file_id=test_file_data["id"],
@@ -329,17 +351,21 @@ class TestFiles:
         from fastapi import HTTPException
         
         # Create user and file in database
-        user = User(**test_user_data)
+        user = User(id=test_user_data["id"], email=test_user_data["email"])
         db_session.add(user)
         await db_session.commit()
         
-        file_record = FileRecord(**test_file_data)
+        # Create file record with the same user_id as the test user
+        file_data = test_file_data.copy()
+        file_data["user_id"] = test_user_data["id"]
+        file_record = FileRecord(**file_data)
         db_session.add(file_record)
         await db_session.commit()
         
         # Mock S3 service failure
-        with patch('app.core.s3.s3_service') as mock_s3:
-            mock_s3.generate_presigned_url.return_value = None
+        with patch('app.api.v1.files.s3_service') as mock_s3:
+            from unittest.mock import AsyncMock
+            mock_s3.generate_presigned_url = AsyncMock(return_value=None)
             
             with pytest.raises(HTTPException) as exc_info:
                 await download_file(

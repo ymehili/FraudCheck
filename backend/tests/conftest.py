@@ -1,5 +1,7 @@
 import pytest
+import pytest_asyncio
 import asyncio
+import uuid
 from typing import AsyncGenerator
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -12,7 +14,7 @@ from app.core.config import settings
 
 
 # Override settings for testing
-test_settings = settings.copy()
+test_settings = settings.model_copy()
 test_settings.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
@@ -24,7 +26,7 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def engine():
     """Create test database engine."""
     engine = create_async_engine(
@@ -46,7 +48,7 @@ async def engine():
     await engine.dispose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
     """Create a test database session."""
     async_session = sessionmaker(
@@ -60,9 +62,9 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-def client(db_session: AsyncSession) -> TestClient:
+def client(db_session: AsyncSession):
     """Create test client with test database."""
-    def override_get_db():
+    async def override_get_db():
         yield db_session
     
     app.dependency_overrides[get_db] = override_get_db
@@ -76,16 +78,20 @@ def client(db_session: AsyncSession) -> TestClient:
 @pytest.fixture
 def mock_s3_service():
     """Mock S3 service for testing."""
-    with patch('app.core.s3.s3_service') as mock_s3:
+    with patch('app.api.v1.files.s3_service') as mock_s3:
+        # Mock sync methods
         mock_s3.validate_file.return_value = True
-        mock_s3.upload_file.return_value = {
+        mock_s3.delete_file.return_value = True
+        
+        # Mock async methods
+        from unittest.mock import AsyncMock
+        mock_s3.upload_file = AsyncMock(return_value={
             's3_key': 'test/key.jpg',
             's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
             'file_size': 1024,
             'content_type': 'image/jpeg'
-        }
-        mock_s3.delete_file.return_value = True
-        mock_s3.generate_presigned_url.return_value = 'https://presigned-url.com'
+        })
+        mock_s3.generate_presigned_url = AsyncMock(return_value='https://presigned-url.com')
         yield mock_s3
 
 
@@ -101,23 +107,30 @@ def mock_clerk_auth():
 
 
 @pytest.fixture
-def test_user_data():
-    """Test user data."""
+def test_user_data(request):
+    """Test user data with unique identifiers per test."""
+    test_name = request.node.name
+    unique_id = f"test-user-{hash(test_name) % 10000}"
+    unique_email = f"test{hash(test_name) % 10000}@example.com"
     return {
-        'id': 'test-user-id',
-        'email': 'test@example.com'
+        'id': unique_id,
+        'email': unique_email
     }
 
 
 @pytest.fixture
 def test_file_data():
     """Test file data."""
+    # Generate unique file ID and user ID for each test
+    file_id = f"test-file-{uuid.uuid4().hex[:8]}"
+    user_id = f"test-user-{uuid.uuid4().hex[:8]}"
+    
     return {
-        'id': 'test-file-id',
-        'user_id': 'test-user-id',
+        'id': file_id,
+        'user_id': user_id,
         'filename': 'test-check.jpg',
-        's3_key': 'uploads/test-user-id/test-file-id_test-check.jpg',
-        's3_url': 'https://test-bucket.s3.amazonaws.com/uploads/test-user-id/test-file-id_test-check.jpg',
+        's3_key': f'uploads/{user_id}/{file_id}_test-check.jpg',
+        's3_url': f'https://test-bucket.s3.amazonaws.com/uploads/{user_id}/{file_id}_test-check.jpg',
         'file_size': 1024,
         'mime_type': 'image/jpeg'
     }

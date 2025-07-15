@@ -49,7 +49,7 @@ async def get_or_create_user(db: AsyncSession, user_data: dict) -> User:
     """
     Get user from database or create if doesn't exist.
     """
-    user_id = user_data.get("user_id")
+    user_id = user_data.get("user_id") or user_data.get("id")  # Support both field names
     email = user_data.get("email")
     
     if not user_id or not email:
@@ -72,7 +72,7 @@ async def get_or_create_user(db: AsyncSession, user_data: dict) -> User:
     return user
 
 
-async def get_db_session() -> AsyncSession:
+async def get_db_session():
     """
     Dependency to get database session.
     """

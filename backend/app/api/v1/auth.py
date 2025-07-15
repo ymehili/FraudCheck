@@ -13,7 +13,7 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     """Get current authenticated user information."""
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 @router.post("/refresh")
 async def refresh_token(

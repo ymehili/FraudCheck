@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 
@@ -20,14 +20,13 @@ class FileUpdate(BaseModel):
 
 
 class FileResponse(FileBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: str
     user_id: str
     s3_key: str
     s3_url: str
     upload_timestamp: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class FileUploadResponse(BaseModel):
