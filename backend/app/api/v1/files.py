@@ -58,6 +58,62 @@ async def upload_file(
             detail=f"Failed to upload file: {str(e)}"
         )
 
+@router.post("/upload-debug", response_model=FileUploadResponse)
+async def upload_file_debug(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug upload endpoint without authentication."""
+    
+    # Validate file
+    s3_service.validate_file(file)
+    
+    try:
+        # Use a test user ID for debugging
+        test_user_id = "debug_user_123"
+        
+        # Get or create test user
+        result = await db.execute(select(User).where(User.id == test_user_id))
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            user = User(id=test_user_id, email="debug@test.com")
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+        
+        # Upload to S3
+        s3_data = await s3_service.upload_file(file, user.id)
+        
+        # Create file record in database
+        file_record = FileRecord(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            filename=file.filename,
+            s3_key=s3_data['s3_key'],
+            s3_url=s3_data['s3_url'],
+            file_size=s3_data['file_size'],
+            mime_type=s3_data['content_type'],
+        )
+        
+        db.add(file_record)
+        await db.commit()
+        await db.refresh(file_record)
+        
+        return FileUploadResponse(
+            file_id=file_record.id,
+            s3_url=file_record.s3_url,
+            upload_timestamp=file_record.upload_timestamp,
+            message="File uploaded successfully (debug mode)"
+        )
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file: {str(e)}"
+        )
+
 @router.get("/", response_model=FileListResponse)
 async def list_files(
     page: int = 1,

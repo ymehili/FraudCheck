@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_REGION: str = "us-east-1"
     S3_BUCKET_NAME: str = "checkguard-uploads"
+    AWS_ENDPOINT_URL: Optional[str] = None  # For LocalStack
     
     # Clerk Authentication
     CLERK_SECRET_KEY: str

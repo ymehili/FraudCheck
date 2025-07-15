@@ -12,12 +12,18 @@ logger = logging.getLogger(__name__)
 class S3Service:
     def __init__(self):
         try:
-            self.s3_client = boto3.client(
-                's3',
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.AWS_REGION
-            )
+            # Configure S3 client with optional endpoint URL for LocalStack
+            client_config = {
+                'aws_access_key_id': settings.AWS_ACCESS_KEY_ID,
+                'aws_secret_access_key': settings.AWS_SECRET_ACCESS_KEY,
+                'region_name': settings.AWS_REGION
+            }
+            
+            if settings.AWS_ENDPOINT_URL:
+                client_config['endpoint_url'] = settings.AWS_ENDPOINT_URL
+                
+            self.s3_client = boto3.client('s3', **client_config)
+            
         except NoCredentialsError:
             logger.error("AWS credentials not found")
             raise HTTPException(
