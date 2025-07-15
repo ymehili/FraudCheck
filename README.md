@@ -90,6 +90,8 @@ docker-compose up -d
 cd backend
 pip install -r requirements.txt
 
+./create_tables.py  # Create initial database tables
+
 # Run database migrations
 alembic upgrade head
 
