@@ -52,10 +52,16 @@ async def get_or_create_user(db: AsyncSession, user_data: dict) -> User:
     user_id = user_data.get("user_id") or user_data.get("id")  # Support both field names
     email = user_data.get("email")
     
-    if not user_id or not email:
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user data from token",
+            detail=f"Invalid user data from token: missing user_id. Available fields: {list(user_data.keys())}",
+        )
+    
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid user data from token: missing email. Available fields: {list(user_data.keys())}",
         )
     
     # Check if user exists

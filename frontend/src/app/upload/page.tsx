@@ -53,7 +53,7 @@ export default function UploadPage() {
       }, 200);
 
       // Upload to backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/files/upload`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/files/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

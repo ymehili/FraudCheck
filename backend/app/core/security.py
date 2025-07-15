@@ -10,27 +10,44 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
     Verify Clerk JWT token and return user data.
     """
     try:
-        # Get Clerk's public key for JWT verification
-        jwks_url = f"https://clerk.{settings.CLERK_PUBLISHABLE_KEY.split('_')[1]}.lcl.dev/.well-known/jwks.json"
-        
-        # For development, we'll use a simplified approach
-        # In production, you should properly validate the JWT with JWKS
-        
         # Decode without verification for development
         # NOTE: In production, you must properly verify the JWT
         unverified_payload = jwt.get_unverified_claims(token)
         
         # Basic validation
-        if not unverified_payload.get("sub"):
+        user_id = unverified_payload.get("sub")
+        if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: missing subject",
+                detail="Invalid token: missing subject (user_id)",
             )
+        
+        # Extract email - try multiple field names that Clerk might use
+        email = (
+            unverified_payload.get("email") or 
+            unverified_payload.get("email_address") or
+            unverified_payload.get("primary_email_address_id")
+        )
+        
+        # If no email found, try to get it from email_addresses array
+        if not email:
+            email_addresses = unverified_payload.get("email_addresses", [])
+            if email_addresses and len(email_addresses) > 0:
+                # Take the first email address
+                if isinstance(email_addresses[0], dict):
+                    email = email_addresses[0].get("email_address", "")
+                else:
+                    email = str(email_addresses[0])
+        
+        # If still no email, use a default or user_id
+        if not email:
+            email = f"{user_id}@clerk.user"  # Fallback email
         
         # Extract user information
         user_data = {
-            "user_id": unverified_payload.get("sub"),
-            "email": unverified_payload.get("email", ""),
+            "user_id": user_id,
+            "id": user_id,  # Support both field names
+            "email": email,
         }
         
         return user_data
