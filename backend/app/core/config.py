@@ -5,7 +5,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://checkguard:checkguard@localhost/checkguard"
+    DATABASE_URL: str = "postgresql+asyncpg://checkguard:checkguard@localhost:5432/checkguard"
     
     # AWS S3
     AWS_ACCESS_KEY_ID: str
