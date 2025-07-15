@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"Frontend tests not yet configured\" && exit 0"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.25.0",

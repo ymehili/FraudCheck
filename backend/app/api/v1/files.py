@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
 import uuid
-from datetime import datetime
 
 from ...database import get_db
 from ...models.user import User

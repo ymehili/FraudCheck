@@ -1,7 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 
-from ...database import get_db
 from ...schemas.user import UserResponse
 from ...models.user import User
 from ..deps import get_current_user

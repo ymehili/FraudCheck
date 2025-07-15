@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from app.main import app
 from app.database import Base, get_db

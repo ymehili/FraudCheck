@@ -1,8 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch, MagicMock
-from fastapi import UploadFile
+from unittest.mock import patch
 
 from app.models.user import User
 from app.models.file import FileRecord
@@ -152,7 +151,6 @@ class TestFiles:
         """Test listing files when user has files."""
         from app.api.v1.files import list_files
         from app.models.user import User
-        from app.models.file import FileRecord
         
         # Create user and file in database
         user = User(id=test_user_data["id"], email=test_user_data["email"])
@@ -212,7 +210,6 @@ class TestFiles:
         """Test successfully getting file."""
         from app.api.v1.files import get_file
         from app.models.user import User
-        from app.models.file import FileRecord
         
         # Create user and file in database
         user = User(id=test_user_data["id"], email=test_user_data["email"])
@@ -246,7 +243,6 @@ class TestFiles:
         """Test successfully deleting file."""
         from app.api.v1.files import delete_file
         from app.models.user import User
-        from app.models.file import FileRecord
         
         # Create user and file in database
         user = User(id=test_user_data["id"], email=test_user_data["email"])
@@ -309,7 +305,6 @@ class TestFiles:
         """Test successfully generating download URL."""
         from app.api.v1.files import download_file
         from app.models.user import User
-        from app.models.file import FileRecord
         
         # Create user and file in database
         user = User(id=test_user_data["id"], email=test_user_data["email"])
@@ -347,7 +342,6 @@ class TestFiles:
         """Test download URL generation with S3 failure."""
         from app.api.v1.files import download_file
         from app.models.user import User
-        from app.models.file import FileRecord
         from fastapi import HTTPException
         
         # Create user and file in database

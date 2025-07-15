@@ -11,8 +11,6 @@ backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
 
 from app.database import create_tables
-from app.models.user import User
-from app.models.file import FileRecord
 
 async def main():
     """Create all database tables."""
