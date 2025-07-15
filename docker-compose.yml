@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: checkguard-postgres
+    environment:
+      POSTGRES_DB: checkguard
+      POSTGRES_USER: checkguard
+      POSTGRES_PASSWORD: checkguard
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U checkguard -d checkguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: checkguard-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: checkguard-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@checkguard.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+
+  # Optional: LocalStack for local AWS services
+  localstack:
+    image: localstack/localstack:latest
+    container_name: checkguard-localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - HOST_TMP_FOLDER=/tmp/localstack
+    volumes:
+      - localstack_data:/tmp/localstack
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  localstack_data:
+    driver: local
+
+networks:
+  default:
+    name: checkguard-network
