@@ -302,3 +302,4 @@ PROJECT.md
 .claude/commands/execute-prp.md
 .claude/commands/generate-prp.md
 .github/copilot-instructions.md
+backend/alembic/versions/
