@@ -88,11 +88,7 @@ print_success "Docker services are running!"
 print_status "Setting up backend..."
 cd backend
 
-# Create virtual environment
-if [ ! -d ".venv" ]; then
-    print_status "Creating Python virtual environment..."
-    python3 -m venv .venv
-fi
+python3 -m venv .venv
 
 # Activate virtual environment
 print_status "Activating virtual environment..."
@@ -105,6 +101,20 @@ pip install -r requirements.txt
 # Wait a bit more for PostgreSQL to be fully ready
 print_status "Waiting for PostgreSQL to be fully ready..."
 sleep 5
+
+# Create alembic/versions directory if it doesn't exist
+if [ ! -d "alembic/versions" ]; then
+    print_status "Creating alembic/versions directory..."
+    mkdir -p alembic/versions
+    print_success "alembic/versions directory created!"
+fi
+
+# Check if initial migration exists, create if needed
+print_status "Checking database migrations..."
+if [ ! "$(ls -A alembic/versions)" ]; then
+    print_status "No migrations found, creating initial migration..."
+    alembic revision --autogenerate -m "Initial migration"
+fi
 
 # Run database migrations
 print_status "Running database migrations..."
