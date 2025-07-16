@@ -1,5 +1,35 @@
 import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import patch, MagicMock
+
+from app.models.user import User
+from app.models.file import FileRecord
+from app.api.v1.files import upload_file_debug, get_file, delete_file, download_file
+
+
+class TestFilesAdditional:
+    """Additional test for file management endpoints."""
+
+    @patch('app.api.v1.files.s3_service')
+    @pytest.mark.asyncio
+    async def test_upload_file_debug_endpoint_new_user(self, mock_s3_service, db_session):
+        """Test upload_file_debug endpoint with new user."""
+        from fastapi import UploadFile
+        import io
+        
+        # Mock S3 service
+        from unittest.mock import AsyncMock
+        mock_s3_service.validate_file.return_value = True
+        mock_s3_service.upload_file = AsyncMock(return_value={
+            's3_key': 'test/key.jpg',
+            's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
+            'file_size': 1024,
+            'content_type': 'image/jpeg'
+        })
+        
+        # Create mock fileck import patch, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
@@ -19,19 +49,21 @@ class TestFilesAdditional:
         import io
         
         # Mock S3 service
+        from unittest.mock import AsyncMock
         mock_s3_service.validate_file.return_value = True
-        mock_s3_service.upload_file.return_value = {
+        mock_s3_service.upload_file = AsyncMock(return_value={
             's3_key': 'test/key.jpg',
             's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
             'file_size': 1024,
             'content_type': 'image/jpeg'
-        }
+        })
         
         # Create mock file
         file_content = b"fake image content"
         file_obj = io.BytesIO(file_content)
-        mock_file = UploadFile(filename="test.jpg", file=file_obj, content_type="image/jpeg")
-        mock_file.size = len(file_content)
+        from starlette.datastructures import Headers
+        headers = Headers({'content-type': 'image/jpeg'})
+        mock_file = UploadFile(file=file_obj, filename="test.jpg", size=len(file_content), headers=headers)
         
         result = await upload_file_debug(file=mock_file, db=db_session)
         
@@ -46,24 +78,28 @@ class TestFilesAdditional:
         import io
         
         # Create debug user first
-        debug_user = User(id="debug_user_123", email="debug@test.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        debug_user = User(id=f"debug_user_123_{unique_id}", email=f"debug-{unique_id}@test.com")
         db_session.add(debug_user)
         await db_session.commit()
         
         # Mock S3 service
+        from unittest.mock import AsyncMock
         mock_s3_service.validate_file.return_value = True
-        mock_s3_service.upload_file.return_value = {
+        mock_s3_service.upload_file = AsyncMock(return_value={
             's3_key': 'test/key.jpg',
             's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
             'file_size': 1024,
             'content_type': 'image/jpeg'
-        }
+        })
         
         # Create mock file
         file_content = b"fake image content"
         file_obj = io.BytesIO(file_content)
-        mock_file = UploadFile(filename="test.jpg", file=file_obj, content_type="image/jpeg")
-        mock_file.size = len(file_content)
+        from starlette.datastructures import Headers
+        headers = Headers({'content-type': 'image/jpeg'})
+        mock_file = UploadFile(file=file_obj, filename="test.jpg", size=len(file_content), headers=headers)
         
         result = await upload_file_debug(file=mock_file, db=db_session)
         
@@ -83,8 +119,9 @@ class TestFilesAdditional:
         # Create mock file
         file_content = b"fake image content"
         file_obj = io.BytesIO(file_content)
-        mock_file = UploadFile(filename="test.jpg", file=file_obj, content_type="image/jpeg")
-        mock_file.size = len(file_content)
+        from starlette.datastructures import Headers
+        headers = Headers({'content-type': 'image/jpeg'})
+        mock_file = UploadFile(file=file_obj, filename="test.jpg", size=len(file_content), headers=headers)
         
         with pytest.raises(HTTPException) as exc_info:
             await upload_file_debug(file=mock_file, db=db_session)
@@ -157,8 +194,10 @@ class TestFilesAdditional:
     async def test_get_file_not_owned_by_user(self, db_session, test_user_data):
         """Test get_file with file not owned by user."""
         # Create two users
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
         user1 = User(id=test_user_data["id"], email=test_user_data["email"])
-        user2 = User(id="other_user", email="other@example.com")
+        user2 = User(id="other_user", email=f"other-{unique_id}@example.com")
         db_session.add(user1)
         db_session.add(user2)
         await db_session.commit()
@@ -187,8 +226,10 @@ class TestFilesAdditional:
     async def test_delete_file_not_owned_by_user(self, db_session, test_user_data):
         """Test delete_file with file not owned by user."""
         # Create two users
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
         user1 = User(id=test_user_data["id"], email=test_user_data["email"])
-        user2 = User(id="other_user_delete", email="other@example.com")
+        user2 = User(id="other_user_delete", email=f"other-delete-{unique_id}@example.com")
         db_session.add(user1)
         db_session.add(user2)
         await db_session.commit()
@@ -245,8 +286,10 @@ class TestFilesAdditional:
     async def test_download_file_not_owned_by_user(self, db_session, test_user_data):
         """Test download_file with file not owned by user."""
         # Create two users
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
         user1 = User(id=test_user_data["id"], email=test_user_data["email"])
-        user2 = User(id="other_user_download", email="other@example.com")
+        user2 = User(id="other_user_download", email=f"other-download-{unique_id}@example.com")
         db_session.add(user1)
         db_session.add(user2)
         await db_session.commit()
@@ -277,25 +320,29 @@ class TestFilesAdditional:
         import io
         
         # Create user
-        user = User(id="test_rollback_user", email="test@example.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        user = User(id="test_rollback_user", email=f"test-rollback-{unique_id}@example.com")
         db_session.add(user)
         await db_session.commit()
         
         # Create mock file
         file_content = b"fake image content"
         file_obj = io.BytesIO(file_content)
-        mock_file = UploadFile(filename="test.jpg", file=file_obj, content_type="image/jpeg")
-        mock_file.size = len(file_content)
+        from starlette.datastructures import Headers
+        headers = Headers({'content-type': 'image/jpeg'})
+        mock_file = UploadFile(file=file_obj, filename="test.jpg", size=len(file_content), headers=headers)
         
         # Mock S3 service success but database failure
         with patch('app.api.v1.files.s3_service') as mock_s3:
+            from unittest.mock import AsyncMock
             mock_s3.validate_file.return_value = True
-            mock_s3.upload_file.return_value = {
+            mock_s3.upload_file = AsyncMock(return_value={
                 's3_key': 'test/key.jpg',
                 's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
                 'file_size': 1024,
                 'content_type': 'image/jpeg'
-            }
+            })
             
             # Mock database add to fail
             with patch.object(db_session, 'add', side_effect=Exception("Database error")):

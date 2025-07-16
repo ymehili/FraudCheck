@@ -202,9 +202,12 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_database_constraint_violations(self, db_session):
         """Test database constraint violations."""
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        
         # Test duplicate ID insertion
-        user1 = User(id="duplicate_test", email="user1@example.com")
-        user2 = User(id="duplicate_test", email="user2@example.com")
+        user1 = User(id="duplicate_test", email=f"user1-{unique_id}@example.com")
+        user2 = User(id="duplicate_test", email=f"user2-{unique_id}@example.com")
         
         db_session.add(user1)
         await db_session.commit()

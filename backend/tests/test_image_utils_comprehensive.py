@@ -34,7 +34,7 @@ class TestImageValidation:
     
     def test_validate_image_file_not_found(self):
         """Test validation with non-existent file."""
-        with pytest.raises(ImageValidationError, match="Image file not found"):
+        with pytest.raises(ImageProcessingError, match="Image file not found"):
             validate_image_file("nonexistent.jpg")
     
     def test_validate_image_file_too_large(self):

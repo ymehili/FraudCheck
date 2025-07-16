@@ -154,7 +154,9 @@ class TestFilesCoverageBoost:
         """Test download_file with non-existent file."""
         from app.api.v1.files import download_file
         
-        user = User(id="test_download_user", email="test@example.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        user = User(id="test_download_user", email=f"test-download-{unique_id}@example.com")
         db_session.add(user)
         await db_session.commit()
         
@@ -169,7 +171,9 @@ class TestFilesCoverageBoost:
         """Test delete_file with non-existent file."""
         from app.api.v1.files import delete_file
         
-        user = User(id="test_delete_user", email="test@example.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        user = User(id="test_delete_user", email=f"test-delete-{unique_id}@example.com")
         db_session.add(user)
         await db_session.commit()
         
@@ -184,7 +188,9 @@ class TestFilesCoverageBoost:
         """Test get_file with non-existent file."""
         from app.api.v1.files import get_file
         
-        user = User(id="test_get_user", email="test@example.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        user = User(id="test_get_user", email=f"test-get-{unique_id}@example.com")
         db_session.add(user)
         await db_session.commit()
         

@@ -501,6 +501,9 @@ def cleanup_temp_files(file_paths: list):
     Args:
         file_paths: List of file paths to clean up
     """
+    if file_paths is None:
+        return
+    
     for file_path in file_paths:
         try:
             if os.path.exists(file_path):

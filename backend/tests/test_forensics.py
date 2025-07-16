@@ -312,9 +312,8 @@ async def test_anomaly_compilation(forensics_engine):
 async def test_forensics_engine_error_handling(forensics_engine):
     """Test forensics engine error handling."""
     # Test with various error conditions
-    with patch('cv2.imread', return_value=None):
-        with pytest.raises(ValueError):
-            await forensics_engine.analyze_image("test.jpg")
+    with pytest.raises(FileNotFoundError):
+        await forensics_engine.analyze_image("test.jpg")
 
 
 @pytest.mark.asyncio

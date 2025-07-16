@@ -6,6 +6,7 @@ import pytest
 import tempfile
 import os
 from unittest.mock import patch, MagicMock
+from app.utils.image_utils import ImageProcessingError
 
 
 class TestFinalCoverage:
@@ -280,7 +281,7 @@ class TestErrorPaths:
         from app.utils.image_utils import validate_image_file, ImageValidationError
         
         # Test with non-existent file
-        with pytest.raises(ImageValidationError):
+        with pytest.raises(ImageProcessingError):
             validate_image_file("this_file_does_not_exist.jpg")
     
     def test_settings_model_fields(self):

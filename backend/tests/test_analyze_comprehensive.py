@@ -66,8 +66,10 @@ class TestAnalyzeInternalFunctions:
     @pytest.mark.asyncio
     async def test_get_user_file_unauthorized(self, db_session):
         """Test unauthorized file access."""
-        user1 = User(id="user1", email="user1@example.com")
-        user2 = User(id="user2", email="user2@example.com")
+        import uuid
+        unique_id = uuid.uuid4().hex[:8]
+        user1 = User(id="user1", email=f"user1-{unique_id}@example.com")
+        user2 = User(id="user2", email=f"user2-{unique_id}@example.com")
         file_record = FileRecord(
             id="test_file_unauthorized",
             filename="test.jpg",
