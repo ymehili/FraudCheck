@@ -35,8 +35,21 @@ docker-compose restart
 print_status "Waiting for services to be ready..."
 sleep 5
 
-# Note: AWS S3 bucket should already exist
-print_warning "Ensure your AWS S3 bucket exists and credentials are configured"
+# Recreate S3 bucket if needed
+print_status "Ensuring S3 bucket exists in LocalStack..."
+cd backend
+source .venv/bin/activate 2>/dev/null || true
+python3 -c "
+import boto3
+try:
+    s3_client = boto3.client('s3', endpoint_url='http://localhost:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1')
+    s3_client.create_bucket(Bucket='checkguard-uploads')
+    print('✅ S3 bucket created')
+except Exception as e:
+    print(f'ℹ️  S3 bucket: {e}')
+" 2>/dev/null || print_warning "Could not create S3 bucket (might already exist)"
+
+cd ..
 
 print_success "Services restarted!"
 echo ""
