@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from typing import Dict, Any
 import httpx
-from ..core.config import settings
+from .config import settings
 
 
 async def verify_clerk_token(token: str) -> Dict[str, Any]:

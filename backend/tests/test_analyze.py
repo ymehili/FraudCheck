@@ -136,44 +136,49 @@ async def test_analyze_check_success(client, auth_headers, sample_file_record, s
     db_session.add(sample_file_record)
     await db_session.commit()
     
-    # Mock the analysis components
-    with patch('app.api.v1.analyze.forensics_engine.analyze_image', return_value=sample_forensics_result) as mock_forensics:
-        with patch('app.api.v1.analyze.get_ocr_engine') as mock_get_ocr:
-            mock_ocr_engine = AsyncMock()
-            mock_ocr_engine.extract_fields.return_value = sample_ocr_result
-            mock_get_ocr.return_value = mock_ocr_engine
-            
-            with patch('app.api.v1.analyze.rule_engine.process_results', return_value=sample_rule_result) as mock_rules:
-                with patch('app.api.v1.analyze._download_file_for_analysis', return_value="/tmp/test.jpg"):
-                    with patch('app.api.v1.analyze._validate_and_preprocess_image', return_value="/tmp/test.jpg"):
-                        
-                        request_data = {
-                            "file_id": sample_file_record.id,
-                            "analysis_types": ["forensics", "ocr", "rules"]
-                        }
-                        
-                        response = client.post(
-                            "/api/v1/analyze/",
-                            json=request_data,
-                            headers=auth_headers
-                        )
-                        
-                        assert response.status_code == 200
-                        result = response.json()
-                        
-                        assert "analysis_id" in result
-                        assert result["file_id"] == sample_file_record.id
-                        assert "timestamp" in result
-                        assert "forensics" in result
-                        assert "ocr" in result
-                        assert "rules" in result
-                        assert "overall_risk_score" in result
-                        assert "confidence" in result
-                        
-                        # Verify analysis was called
-                        mock_forensics.assert_called_once()
-                        mock_ocr_engine.extract_fields.assert_called_once()
-                        mock_rules.assert_called_once()
+    # Mock authentication
+    from app.models.user import User
+    mock_user = User(id=sample_file_record.user_id, email="test@example.com")
+    
+    with patch('app.api.deps.get_current_user', return_value=mock_user):
+        # Mock the analysis components
+        with patch('app.api.v1.analyze.forensics_engine.analyze_image', return_value=sample_forensics_result) as mock_forensics:
+            with patch('app.api.v1.analyze.get_ocr_engine') as mock_get_ocr:
+                mock_ocr_engine = AsyncMock()
+                mock_ocr_engine.extract_fields.return_value = sample_ocr_result
+                mock_get_ocr.return_value = mock_ocr_engine
+                
+                with patch('app.api.v1.analyze.rule_engine.process_results', return_value=sample_rule_result) as mock_rules:
+                    with patch('app.api.v1.analyze._download_file_for_analysis', return_value="/tmp/test.jpg"):
+                        with patch('app.api.v1.analyze._validate_and_preprocess_image', return_value="/tmp/test.jpg"):
+                            
+                            request_data = {
+                                "file_id": sample_file_record.id,
+                                "analysis_types": ["forensics", "ocr", "rules"]
+                            }
+                            
+                            response = client.post(
+                                "/api/v1/analyze/",
+                                json=request_data,
+                                headers=auth_headers
+                            )
+                            
+                            assert response.status_code == 200
+                            result = response.json()
+                            
+                            assert "analysis_id" in result
+                            assert result["file_id"] == sample_file_record.id
+                            assert "timestamp" in result
+                            assert "forensics" in result
+                            assert "ocr" in result
+                            assert "rules" in result
+                            assert "overall_risk_score" in result
+                            assert "confidence" in result
+                            
+                            # Verify analysis was called
+                            mock_forensics.assert_called_once()
+                            mock_ocr_engine.extract_fields.assert_called_once()
+                            mock_rules.assert_called_once()
 
 
 @pytest.mark.asyncio

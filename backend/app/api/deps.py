@@ -64,23 +64,30 @@ async def get_or_create_user(db: AsyncSession, user_data: dict) -> User:
             detail=f"Invalid user data from token: missing email. Available fields: {list(user_data.keys())}",
         )
     
-    # Check if user exists
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        # Create new user
-        user = User(id=user_id, email=email)
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-    
-    return user
+    try:
+        # Check if user exists
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            # Create new user
+            user = User(id=user_id, email=email)
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+        
+        return user
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while getting or creating user: {str(e)}",
+        )
 
 
 async def get_db_session():
     """
     Dependency to get database session.
     """
-    async with get_db() as session:
+    async for session in get_db():
         yield session

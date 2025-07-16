@@ -148,23 +148,24 @@ class TestImageNormalization:
     def test_normalize_image_format_rgba_to_jpeg(self):
         """Test normalizing RGBA to JPEG."""
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_in:
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_out:
-                # Create RGBA image
-                image = Image.new('RGBA', (100, 100), color=(255, 0, 0, 128))
-                image.save(tmp_in.name, 'PNG')
-                
-                with patch('tempfile.NamedTemporaryFile') as mock_temp:
-                    mock_temp.return_value.__enter__.return_value.name = tmp_out.name
-                    
-                    result_path = normalize_image_format(tmp_in.name, 'JPEG', quality=80)
-                    
-                    assert result_path == tmp_out.name
-                    # Verify output image exists and is RGB
-                    output_image = Image.open(result_path)
-                    assert output_image.mode == 'RGB'
+            # Create RGBA image
+            image = Image.new('RGBA', (100, 100), color=(255, 0, 0, 128))
+            image.save(tmp_in.name, 'PNG')
+            
+            result_path = normalize_image_format(tmp_in.name, 'JPEG', quality=80)
+            
+            # Verify output path has expected format
+            assert result_path.endswith('.normalized.jpeg')
+            assert os.path.exists(result_path)
+            
+            # Verify output image exists and is RGB
+            output_image = Image.open(result_path)
+            assert output_image.mode == 'RGB'
+            
+            # Cleanup
+            os.unlink(result_path)
         
         os.unlink(tmp_in.name)
-        os.unlink(tmp_out.name)
     
     def test_normalize_image_format_png_conversion(self):
         """Test normalizing to PNG format."""

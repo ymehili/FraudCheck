@@ -71,7 +71,7 @@ class TestFiles:
         mock_get_or_create_user.return_value = mock_user
         
         # Mock S3 service failure
-        with patch('app.core.s3.s3_service') as mock_s3:
+        with patch('app.api.v1.files.s3_service') as mock_s3:
             mock_s3.validate_file.return_value = True
             mock_s3.upload_file.side_effect = Exception("S3 upload failed")
             

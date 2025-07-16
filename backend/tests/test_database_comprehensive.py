@@ -19,7 +19,9 @@ class TestDatabaseModule:
         mock_session = AsyncMock(spec=AsyncSession)
         
         with patch('app.database.AsyncSessionLocal') as mock_session_local:
-            mock_session_local.return_value = mock_session
+            # Mock the context manager behavior
+            mock_session_local.return_value.__aenter__.return_value = mock_session
+            mock_session_local.return_value.__aexit__.return_value = None
             
             # Use get_db as an async generator
             db_gen = get_db()
@@ -40,7 +42,9 @@ class TestDatabaseModule:
         mock_session.close.side_effect = Exception("Close failed")
         
         with patch('app.database.AsyncSessionLocal') as mock_session_local:
-            mock_session_local.return_value = mock_session
+            # Mock the context manager behavior
+            mock_session_local.return_value.__aenter__.return_value = mock_session
+            mock_session_local.return_value.__aexit__.return_value = None
             
             db_gen = get_db()
             db = await db_gen.__anext__()
@@ -60,7 +64,9 @@ class TestDatabaseModule:
         mock_session = AsyncMock(spec=AsyncSession)
         
         with patch('app.database.AsyncSessionLocal') as mock_session_local:
-            mock_session_local.return_value = mock_session
+            # Mock the context manager behavior
+            mock_session_local.return_value.__aenter__.return_value = mock_session
+            mock_session_local.return_value.__aexit__.return_value = None
             
             db_gen = get_db()
             db = await db_gen.__anext__()
@@ -71,14 +77,14 @@ class TestDatabaseModule:
             except StopAsyncIteration:
                 pass
             
-            # Verify close was called
-            mock_session.close.assert_called_once()
+            # Verify context manager exit was called
+            mock_session_local.return_value.__aexit__.assert_called_once()
     
     def test_engine_creation(self):
         """Test database engine creation."""
         # The engine should be created during import
         assert engine is not None
-        assert str(engine.url).startswith('sqlite+aiosqlite:///')
+        assert str(engine.url).startswith('postgresql+asyncpg://')
     
     def test_session_local_creation(self):
         """Test AsyncSessionLocal creation."""

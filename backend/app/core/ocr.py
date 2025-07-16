@@ -123,6 +123,9 @@ class OCREngine:
             
             return ocr_result
             
+        except FileNotFoundError:
+            # Let FileNotFoundError propagate as-is
+            raise
         except Exception as e:
             logger.error(f"OCR extraction failed for {image_path}: {str(e)}")
             raise OCRError(f"Failed to extract fields from image: {str(e)}")
