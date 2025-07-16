@@ -27,17 +27,10 @@ class TestDepsModule:
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_get_db.return_value = mock_context
             
-            # Test the dependency
-            db_gen = get_db_session()
-            session = await db_gen.__anext__()
-            
-            assert session == mock_session
-            
-            # Clean up
-            try:
-                await db_gen.__anext__()
-            except StopAsyncIteration:
-                pass
+            # Test the dependency - get_db_session is now an async context manager
+            async for session in get_db_session():
+                assert session == mock_session
+                break
     
     @pytest.mark.asyncio
     async def test_get_db_session_error(self):
@@ -46,8 +39,8 @@ class TestDepsModule:
             mock_get_db.side_effect = Exception("Database connection failed")
             
             with pytest.raises(Exception, match="Database connection failed"):
-                db_gen = get_db_session()
-                await db_gen.__anext__()
+                async for session in get_db_session():
+                    pass
 
 
 class TestForensicsEngineEdgeCases:
@@ -74,20 +67,21 @@ class TestForensicsEngineEdgeCases:
         with patch('cv2.imread', return_value=mock_image):
             with patch('cv2.resize', return_value=mock_image):
                 with patch('os.path.exists', return_value=True):
-                    with patch.object(engine, '_detect_edge_inconsistencies', return_value={'score': 0.5}):
-                        with patch.object(engine, '_detect_compression_artifacts', return_value={'score': 0.6}):
-                            with patch.object(engine, '_analyze_font_consistency', return_value={'score': 0.7}):
-                                result = await engine.analyze_image("test.jpg")
-                                assert result is not None
+                    with patch('cv2.cvtColor', return_value=mock_image):
+                        with patch.object(engine, '_detect_edge_inconsistencies', return_value={'score': 0.5}):
+                            with patch.object(engine, '_analyze_compression_artifacts', return_value={'score': 0.6}):
+                                with patch.object(engine, '_analyze_font_consistency', return_value={'score': 0.7}):
+                                    result = await engine.analyze_image("test.jpg")
+                                    assert result is not None
     
     @pytest.mark.asyncio
     async def test_forensics_engine_error_recovery(self):
         """Test forensics engine error recovery."""
         engine = ForensicsEngine()
         
-        with patch('cv2.imread', return_value=None):  # Simulate failed image load
-            with pytest.raises(ValueError, match="Failed to load image"):
-                await engine.analyze_image("test.jpg")
+        # Test with non-existent file
+        with pytest.raises(FileNotFoundError, match="Image not found"):
+            await engine.analyze_image("test.jpg")
 
 
 class TestOCREngineEdgeCases:

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://checkguard:checkguard@localhost:5432/checkguard"
     debug: bool = False
     secret_key: str = "test-secret-key-for-development"
+    algorithm: str = "HS256"  # JWT algorithm
     
     model_config = ConfigDict(env_file=".env")
 

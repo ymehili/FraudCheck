@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 from unittest.mock import patch
 
 from app.main import app
@@ -64,6 +65,13 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture
 def client(db_session: AsyncSession):
     """Create test client with test database."""
+    import time
+    import random
+    
+    # Create unique user ID for this test
+    unique_suffix = f"{int(time.time() * 1000000)}-{random.randint(1000, 9999)}"
+    unique_user_id = f"test-user-{unique_suffix}"
+    
     async def override_get_db():
         yield db_session
     
@@ -71,8 +79,8 @@ def client(db_session: AsyncSession):
         from app.models.user import User
         from datetime import datetime, timezone
         return User(
-            id="test-user-id", 
-            email="test@example.com",
+            id=unique_user_id, 
+            email=f"{unique_user_id}@example.com",
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
@@ -116,9 +124,12 @@ def authenticated_client(db_session: AsyncSession):
     def override_get_current_user():
         from app.models.user import User
         from datetime import datetime, timezone
+        # Use unique user ID for each test to ensure isolation
+        import uuid
+        unique_user_id = f"test-user-{uuid.uuid4().hex[:8]}"
         return User(
-            id="test-user-id", 
-            email="test@example.com",
+            id=unique_user_id, 
+            email=f"{unique_user_id}@example.com",
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )

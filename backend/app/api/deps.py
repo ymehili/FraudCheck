@@ -90,7 +90,7 @@ async def get_db_session():
     Dependency to get database session.
     """
     try:
-        async for session in get_db():
+        async with get_db() as session:
             yield session
     except Exception as e:
         raise HTTPException(
