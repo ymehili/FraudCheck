@@ -167,9 +167,11 @@ def setup_auth_for_all_tests():
 @pytest.fixture
 def test_user_data():
     """Test user data with consistent identifiers."""
+    import uuid
+    user_id = f"test-user-{uuid.uuid4().hex[:8]}"
     return {
-        'id': 'test-user-4645',
-        'email': 'test@example.com'
+        'id': user_id,
+        'email': f'{user_id}@example.com'
     }
 
 

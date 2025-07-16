@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from app.models.user import User
 from app.models.file import FileRecord
@@ -10,13 +10,26 @@ from app.models.file import FileRecord
 class TestFiles:
     """Test file upload and management endpoints."""
 
-    def test_upload_file_without_auth(self, client: TestClient, sample_image_file):
+    @patch('app.core.security.verify_clerk_token')
+    def test_upload_file_without_auth(self, mock_verify_token, sample_image_file):
         """Test file upload without authentication."""
-        response = client.post(
-            "/api/v1/files/upload",
-            files={"file": sample_image_file}
+        # Make the auth verification raise an exception
+        from fastapi import HTTPException
+        mock_verify_token.side_effect = HTTPException(
+            status_code=401, 
+            detail="Invalid token"
         )
-        assert response.status_code == 401
+        
+        # Create a client without auth overrides
+        from app.main import app
+        from fastapi.testclient import TestClient
+        
+        with TestClient(app) as test_client:
+            response = test_client.post(
+                "/api/v1/files/upload",
+                files={"file": sample_image_file}
+            )
+            assert response.status_code == 401
 
     @patch('app.api.deps.verify_clerk_token')
     @patch('app.api.deps.get_or_create_user')

@@ -281,5 +281,6 @@ class TestDatabaseModule:
             except StopAsyncIteration:
                 pass
             
-            # Verify session was properly closed
-            mock_session.close.assert_called_once()
+            # Verify context manager was properly used
+            async_context_manager.__aenter__.assert_called_once()
+            async_context_manager.__aexit__.assert_called_once()
