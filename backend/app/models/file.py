@@ -2,12 +2,13 @@ from sqlalchemy import String, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from ..database import Base
 
 if TYPE_CHECKING:
     from .user import User
+    from .analysis import AnalysisResult
 
 
 class FileRecord(Base):
@@ -26,5 +27,8 @@ class FileRecord(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Relationship with user
+    # Relationships
     user: Mapped["User"] = relationship("User", back_populates="files")
+    analysis_results: Mapped[List["AnalysisResult"]] = relationship(
+        "AnalysisResult", back_populates="file"
+    )

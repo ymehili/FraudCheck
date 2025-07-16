@@ -1,0 +1,310 @@
+{
+  "version": "1.0",
+  "description": "CheckGuard AI fraud detection rules configuration",
+  "category_weights": {
+    "forensics": 0.4,
+    "ocr": 0.3,
+    "cross_validation": 0.3
+  },
+  "rules": [
+    {
+      "id": "forensics_edge_quality",
+      "name": "Edge Quality Check",
+      "description": "Checks for poor edge quality indicating potential tampering",
+      "category": "forensics",
+      "weight": 0.25,
+      "condition": {
+        "type": "threshold",
+        "field": "edge_score",
+        "operator": "less_than",
+        "value": 0.3
+      },
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "forensics_compression_artifacts",
+      "name": "High Compression Artifacts",
+      "description": "Detects high compression artifacts suggesting manipulation",
+      "category": "forensics",
+      "weight": 0.2,
+      "condition": {
+        "type": "threshold",
+        "field": "compression_score",
+        "operator": "greater_than",
+        "value": 0.7
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "forensics_font_inconsistency",
+      "name": "Font Inconsistency",
+      "description": "Detects font inconsistencies indicating potential alteration",
+      "category": "forensics",
+      "weight": 0.2,
+      "condition": {
+        "type": "threshold",
+        "field": "font_score",
+        "operator": "less_than",
+        "value": 0.4
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "forensics_overall_score",
+      "name": "Overall Forensics Score",
+      "description": "Flags low overall forensics score indicating potential fraud",
+      "category": "forensics",
+      "weight": 0.35,
+      "condition": {
+        "type": "threshold",
+        "field": "overall_score",
+        "operator": "less_than",
+        "value": 0.5
+      },
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "ocr_low_confidence",
+      "name": "Low OCR Confidence",
+      "description": "Flags low confidence OCR extraction",
+      "category": "ocr",
+      "weight": 0.25,
+      "condition": {
+        "type": "threshold",
+        "field": "extraction_confidence",
+        "operator": "less_than",
+        "value": 0.5
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "ocr_very_low_confidence",
+      "name": "Very Low OCR Confidence",
+      "description": "Flags very low confidence OCR extraction requiring manual review",
+      "category": "ocr",
+      "weight": 0.3,
+      "condition": {
+        "type": "threshold",
+        "field": "extraction_confidence",
+        "operator": "less_than",
+        "value": 0.3
+      },
+      "severity": "critical",
+      "enabled": true
+    },
+    {
+      "id": "ocr_missing_critical_fields",
+      "name": "Missing Critical Fields",
+      "description": "Checks for missing payee or amount fields",
+      "category": "ocr",
+      "weight": 0.3,
+      "condition": {
+        "type": "missing_fields",
+        "fields": ["payee", "amount"]
+      },
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "ocr_missing_payee",
+      "name": "Missing Payee",
+      "description": "Checks for missing payee field",
+      "category": "ocr",
+      "weight": 0.15,
+      "condition": {
+        "type": "missing_fields",
+        "fields": ["payee"]
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "cross_amount_validation",
+      "name": "Amount Validation",
+      "description": "Validates amount format and reasonableness",
+      "category": "cross_validation",
+      "weight": 0.35,
+      "condition": {
+        "type": "amount_validation"
+      },
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "cross_date_validation",
+      "name": "Date Validation",
+      "description": "Validates date format and reasonableness",
+      "category": "cross_validation",
+      "weight": 0.25,
+      "condition": {
+        "type": "date_validation"
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "cross_account_format",
+      "name": "Account Number Format",
+      "description": "Validates account number format",
+      "category": "cross_validation",
+      "weight": 0.15,
+      "condition": {
+        "type": "account_validation"
+      },
+      "severity": "low",
+      "enabled": true
+    },
+    {
+      "id": "cross_routing_format",
+      "name": "Routing Number Format",
+      "description": "Validates routing number format (9 digits)",
+      "category": "cross_validation",
+      "weight": 0.15,
+      "condition": {
+        "type": "routing_validation"
+      },
+      "severity": "low",
+      "enabled": true
+    },
+    {
+      "id": "cross_signature_presence",
+      "name": "Signature Presence",
+      "description": "Checks for presence of signature on check",
+      "category": "cross_validation",
+      "weight": 0.1,
+      "condition": {
+        "type": "signature_validation"
+      },
+      "severity": "low",
+      "enabled": true
+    },
+    {
+      "id": "forensics_cloned_regions",
+      "name": "Cloned Regions Detection",
+      "description": "Detects potentially cloned or duplicated regions",
+      "category": "forensics",
+      "weight": 0.15,
+      "condition": {
+        "type": "cloning_detection"
+      },
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "forensics_edge_continuity",
+      "name": "Edge Continuity",
+      "description": "Checks for broken or discontinuous edges",
+      "category": "forensics",
+      "weight": 0.1,
+      "condition": {
+        "type": "edge_continuity"
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "ocr_field_consistency",
+      "name": "Field Consistency",
+      "description": "Checks for consistency across extracted fields",
+      "category": "ocr",
+      "weight": 0.15,
+      "condition": {
+        "type": "field_consistency"
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "cross_unusual_patterns",
+      "name": "Unusual Pattern Detection",
+      "description": "Detects unusual patterns that might indicate fraud",
+      "category": "cross_validation",
+      "weight": 0.2,
+      "condition": {
+        "type": "pattern_analysis"
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "forensics_jpeg_artifacts",
+      "name": "JPEG Artifacts",
+      "description": "Detects excessive JPEG compression artifacts",
+      "category": "forensics",
+      "weight": 0.12,
+      "condition": {
+        "type": "jpeg_artifacts"
+      },
+      "severity": "low",
+      "enabled": true
+    },
+    {
+      "id": "forensics_recompression",
+      "name": "Recompression Detection",
+      "description": "Detects signs of multiple compression passes",
+      "category": "forensics",
+      "weight": 0.13,
+      "condition": {
+        "type": "recompression_detection"
+      },
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "ocr_text_quality",
+      "name": "Text Quality Assessment",
+      "description": "Assesses the quality of extracted text",
+      "category": "ocr",
+      "weight": 0.1,
+      "condition": {
+        "type": "text_quality"
+      },
+      "severity": "low",
+      "enabled": true
+    }
+  ],
+  "thresholds": {
+    "risk_score": {
+      "low": 0.3,
+      "medium": 0.6,
+      "high": 0.8,
+      "critical": 0.9
+    },
+    "confidence": {
+      "minimum": 0.3,
+      "acceptable": 0.6,
+      "high": 0.8
+    }
+  },
+  "recommendations": {
+    "low_risk": [
+      "Check appears to be legitimate",
+      "Standard processing recommended"
+    ],
+    "medium_risk": [
+      "Additional verification recommended",
+      "Consider manual review of flagged areas"
+    ],
+    "high_risk": [
+      "Manual review required",
+      "Verify with additional documentation",
+      "Consider enhanced authentication"
+    ],
+    "critical_risk": [
+      "DO NOT PROCESS - Manual review required",
+      "Potential fraud detected",
+      "Contact security team immediately"
+    ]
+  },
+  "metadata": {
+    "created_date": "2024-01-01",
+    "last_updated": "2024-01-01",
+    "version": "1.0",
+    "author": "CheckGuard AI Team"
+  }
+}

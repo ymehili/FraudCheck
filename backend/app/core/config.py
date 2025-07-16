@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     CLERK_SECRET_KEY: str
     CLERK_PUBLISHABLE_KEY: str
     
+    # Gemini API
+    GEMINI_API_KEY: str = "test_key_for_testing"
+    
     # API Settings
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "CheckGuard AI"
@@ -29,7 +32,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_FILE_TYPES: List[str] = ["image/jpeg", "image/png", "application/pdf"]
     
-    model_config = ConfigDict(env_file=".env")
+    model_config = {"env_file": ".env"}
 
 
 settings = Settings()
