@@ -253,7 +253,8 @@ class RuleEngine:
                 passed_rules=passed_rules,
                 rule_scores=rule_scores,
                 confidence_factors=confidence_factors,
-                recommendations=recommendations
+                recommendations=recommendations,
+                overall_confidence=1.0 - risk_score  # Calculate from risk score
             )
             
         except Exception as e:

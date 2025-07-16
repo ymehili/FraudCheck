@@ -10,7 +10,7 @@ from ...schemas.file import FileResponse, FileUploadResponse, FileListResponse
 from ...core.s3 import s3_service
 from ..deps import get_current_user
 
-router = APIRouter()
+router = APIRouter(tags=["files"])
 
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(

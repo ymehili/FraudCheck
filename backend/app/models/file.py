@@ -32,3 +32,9 @@ class FileRecord(Base):
     analysis_results: Mapped[List["AnalysisResult"]] = relationship(
         "AnalysisResult", back_populates="file"
     )
+    
+    def __init__(self, **kwargs):
+        # Handle content_type alias for mime_type
+        if 'content_type' in kwargs:
+            kwargs['mime_type'] = kwargs.pop('content_type')
+        super().__init__(**kwargs)

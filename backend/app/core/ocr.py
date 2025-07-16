@@ -13,6 +13,11 @@ from ..schemas.analysis import OCRResult
 logger = logging.getLogger(__name__)
 
 
+class OCRError(Exception):
+    """Custom exception for OCR-related errors."""
+    pass
+
+
 class CheckFieldsSchema(BaseModel):
     """Pydantic schema for structured OCR extraction"""
     payee: Optional[str] = Field(None, description="The payee name on the check")
@@ -92,7 +97,7 @@ class OCREngine:
         try:
             # Validate input
             if not os.path.exists(image_path):
-                raise FileNotFoundError(f"Image not found: {image_path}")
+                raise OCRError(f"Image not found: {image_path}")
             
             # Load and validate image
             image = await self._load_image(image_path)
@@ -421,11 +426,6 @@ class OCREngine:
             validation_results['valid'] = False
             validation_results['errors'].append(f'Validation error: {str(e)}')
             return validation_results
-
-
-class OCRError(Exception):
-    """Custom exception for OCR-related errors."""
-    pass
 
 
 # Helper functions

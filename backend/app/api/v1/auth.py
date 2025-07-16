@@ -4,7 +4,7 @@ from ...schemas.user import UserResponse
 from ...models.user import User
 from ..deps import get_current_user
 
-router = APIRouter()
+router = APIRouter(tags=["auth"])
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(

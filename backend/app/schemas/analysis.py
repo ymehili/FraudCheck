@@ -38,6 +38,7 @@ class RuleEngineResult(BaseModel):
     rule_scores: Dict[str, float]
     confidence_factors: Dict[str, float]
     recommendations: List[str]
+    overall_confidence: Optional[float] = 0.0  # For test compatibility
 
 
 class AnalysisRequest(BaseModel):

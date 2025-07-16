@@ -6,7 +6,7 @@ import tempfile
 import json
 import uuid
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch, AsyncMock, MagicMock, mock_open
 from fastapi import HTTPException
 from starlette.testclient import TestClient
@@ -92,7 +92,7 @@ class TestAnalyzeInternalFunctions:
         analysis = AnalysisResult(
             id="test_analysis",
             file_id="test_file",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.8,
             edge_inconsistencies={},
             compression_artifacts={},
@@ -370,7 +370,7 @@ class TestAnalyzeInternalFunctions:
         analysis = AnalysisResult(
             id="test_analysis",
             file_id="test_file",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.75,
             edge_inconsistencies={"test": "data"},
             compression_artifacts={"artifacts": "found"},
@@ -396,7 +396,7 @@ class TestAnalyzeInternalFunctions:
         analysis = AnalysisResult(
             id="test_analysis",
             file_id="test_file",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.75,
             edge_inconsistencies={},
             compression_artifacts={},
@@ -556,7 +556,7 @@ class TestAnalyzeResponseModels:
         analysis = AnalysisResult(
             id="test_analysis",
             file_id="test_file",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.75,
             edge_inconsistencies={"edges": "detected"},
             compression_artifacts={"artifacts": "found"},
@@ -590,7 +590,7 @@ class TestAnalyzeResponseModels:
         analysis = AnalysisResult(
             id="test_analysis",
             file_id="test_file",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=None,
             edge_inconsistencies={},
             compression_artifacts={},

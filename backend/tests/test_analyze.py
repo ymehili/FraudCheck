@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import tempfile
 import os
 from PIL import Image
@@ -37,7 +37,7 @@ def sample_analysis_result():
     return AnalysisResult(
         id=str(uuid.uuid4()),
         file_id="test-file-id",
-        analysis_timestamp=datetime.utcnow(),
+        analysis_timestamp=datetime.now(timezone.utc),
         forensics_score=0.75,
         edge_inconsistencies={"score": 0.8, "detected": ["edge_issue"]},
         compression_artifacts={"score": 0.6, "blocks": 10},
@@ -377,7 +377,7 @@ async def test_list_analyses_pagination(client, auth_headers, sample_file_record
         analysis_result = AnalysisResult(
             id=str(uuid.uuid4()),
             file_id=sample_file_record.id,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.75,
             edge_inconsistencies={},
             compression_artifacts={},

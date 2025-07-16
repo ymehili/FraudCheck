@@ -8,3 +8,6 @@ router = APIRouter()
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
 router.include_router(files_router, prefix="/files", tags=["files"])
 router.include_router(analyze_router, prefix="/analyze", tags=["analysis"])
+
+# Alias for tests
+api_router = router

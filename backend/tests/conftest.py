@@ -67,7 +67,19 @@ def client(db_session: AsyncSession):
     async def override_get_db():
         yield db_session
     
+    def override_get_current_user():
+        from app.models.user import User
+        from datetime import datetime, timezone
+        return User(
+            id="test-user-id", 
+            email="test@example.com",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+    
+    from app.api.deps import get_current_user
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
     
     with TestClient(app) as test_client:
         yield test_client
@@ -96,11 +108,46 @@ def mock_s3_service():
 
 
 @pytest.fixture
-def mock_clerk_auth():
-    """Mock Clerk authentication for testing."""
+def authenticated_client(db_session: AsyncSession):
+    """Create test client with test database and automatic authentication."""
+    async def override_get_db():
+        yield db_session
+    
+    def override_get_current_user():
+        from app.models.user import User
+        from datetime import datetime, timezone
+        return User(
+            id="test-user-id", 
+            email="test@example.com",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+    
+    from app.api.deps import get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    
+    # Also mock the verification function
     with patch('app.core.security.verify_clerk_token') as mock_verify:
         mock_verify.return_value = {
             'user_id': 'test-user-id',
+            'id': 'test-user-id',
+            'email': 'test@example.com'
+        }
+        
+        with TestClient(app) as test_client:
+            yield test_client
+    
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def setup_auth_for_all_tests():
+    """Setup authentication for all tests automatically."""
+    with patch('app.core.security.verify_clerk_token') as mock_verify:
+        mock_verify.return_value = {
+            'user_id': 'test-user-id',
+            'id': 'test-user-id', 
             'email': 'test@example.com'
         }
         yield mock_verify

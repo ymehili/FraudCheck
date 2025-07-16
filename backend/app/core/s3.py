@@ -23,6 +23,7 @@ class S3Service:
                 client_config['endpoint_url'] = settings.AWS_ENDPOINT_URL
                 
             self.s3_client = boto3.client('s3', **client_config)
+            self.client = self.s3_client  # Alias for tests
             
         except NoCredentialsError:
             logger.error("AWS credentials not found")

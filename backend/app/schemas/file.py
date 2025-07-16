@@ -31,8 +31,9 @@ class FileResponse(FileBase):
 
 class FileUploadResponse(BaseModel):
     file_id: str
-    s3_url: str
-    upload_timestamp: datetime
+    filename: Optional[str] = None
+    s3_url: Optional[str] = None
+    upload_timestamp: Optional[datetime] = None
     message: str = "File uploaded successfully"
 
 

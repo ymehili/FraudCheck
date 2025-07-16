@@ -36,7 +36,7 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
     """
     try:
         if not os.path.exists(file_path):
-            raise ImageValidationError(f"Image file not found: {file_path}")
+            raise ImageProcessingError(f"Image file not found: {file_path}")
         
         # Check file size
         file_size = os.path.getsize(file_path)
@@ -64,7 +64,7 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
         try:
             image.verify()
         except Exception as e:
-            raise ImageValidationError(f"Image appears to be corrupted: {str(e)}")
+            raise ImageProcessingError(f"Image appears to be corrupted: {str(e)}")
         
         # Reload image after verify (verify() closes the image)
         image = Image.open(file_path)
@@ -80,8 +80,10 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
         
     except ImageValidationError:
         raise
+    except ImageProcessingError:
+        raise  
     except Exception as e:
-        raise ImageValidationError(f"Image validation failed: {str(e)}")
+        raise ImageProcessingError(f"Image validation failed: {str(e)}")
 
 
 def normalize_image_format(file_path: str, target_format: str = 'JPEG', 

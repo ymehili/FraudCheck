@@ -7,6 +7,8 @@ Base = declarative_base()
 # Import models to ensure they are registered with the Base
 from app.models import *  # noqa
 
+DATABASE_URL = settings.DATABASE_URL  # Export for tests
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,

@@ -314,7 +314,7 @@ class TestModelEdgeCases:
         from app.models.user import User
         from app.models.file import FileRecord
         from app.models.analysis import AnalysisResult
-        from datetime import datetime
+        from datetime import datetime, timezone
         
         # Test User model
         user = User(id="test", email="test@example.com")
@@ -335,7 +335,7 @@ class TestModelEdgeCases:
         analysis = AnalysisResult(
             id="test",
             file_id="test",
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             forensics_score=0.5,
             edge_inconsistencies={},
             compression_artifacts={},

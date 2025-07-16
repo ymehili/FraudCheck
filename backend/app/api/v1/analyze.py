@@ -4,8 +4,9 @@ from sqlalchemy import select
 import uuid
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from dataclasses import dataclass
 
 from ...database import get_db
 from ...models.user import User
@@ -15,7 +16,10 @@ from ...schemas.analysis import (
     AnalysisRequest, 
     AnalysisResponse, 
     AnalysisResultResponse,
-    AnalysisListResponse
+    AnalysisListResponse,
+    ForensicsResult,
+    OCRResult,
+    RuleEngineResult
 )
 from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
@@ -30,8 +34,16 @@ from ...utils.image_utils import (
 )
 from ..deps import get_current_user
 
-router = APIRouter()
+router = APIRouter(tags=["analysis"])
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ComprehensiveAnalysisResult:
+    """Data class for comprehensive analysis results."""
+    forensics_result: Optional[ForensicsResult] = None
+    ocr_result: Optional[OCRResult] = None
+    rule_result: Optional[RuleEngineResult] = None
 
 
 # Initialize engines
@@ -378,7 +390,7 @@ async def _store_analysis_results(file_id: str, analysis_result: dict,
         analysis_record = AnalysisResult(
             id=str(uuid.uuid4()),
             file_id=file_id,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
             
             # Forensics results
             forensics_score=forensics_result.overall_score if forensics_result else 0.0,

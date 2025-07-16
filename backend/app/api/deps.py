@@ -89,5 +89,11 @@ async def get_db_session():
     """
     Dependency to get database session.
     """
-    async for session in get_db():
-        yield session
+    try:
+        async for session in get_db():
+            yield session
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database connection failed: {str(e)}",
+        )

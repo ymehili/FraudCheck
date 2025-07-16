@@ -140,7 +140,7 @@ class TestSimpleCoverage:
         
         # Test that get_db returns a generator
         db_gen = get_db()
-        assert hasattr(db_gen, '__next__')
+        assert hasattr(db_gen, '__anext__')
     
     def test_model_string_representations(self):
         """Test model string representations."""
