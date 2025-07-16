@@ -4,7 +4,7 @@ from app.api.v1 import api
 from app.core.config import settings
 
 app = FastAPI(
-    title="CheckGuard AI",
+    title="CheckGuard AI API",
     description="AI-powered check fraud detection system",
     version="1.0.0",
 )

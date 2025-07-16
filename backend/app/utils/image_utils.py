@@ -64,7 +64,7 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
         try:
             image.verify()
         except Exception as e:
-            raise ImageProcessingError(f"Image appears to be corrupted: {str(e)}")
+            raise ImageValidationError(f"Image appears to be corrupted: {str(e)}")
         
         # Reload image after verify (verify() closes the image)
         image = Image.open(file_path)
@@ -81,9 +81,13 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
     except ImageValidationError:
         raise
     except ImageProcessingError:
-        raise  
+        raise
     except Exception as e:
-        raise ImageValidationError(f"Image validation failed: {str(e)}")
+        # If it's a PIL/image opening error, treat as validation error (invalid file)
+        if "cannot identify image file" in str(e) or "UnidentifiedImageError" in str(type(e)):
+            raise ImageValidationError(f"Image validation failed: {str(e)}")
+        else:
+            raise ImageValidationError(f"Image validation failed: {str(e)}")
 
 
 def normalize_image_format(file_path: str, target_format: str = 'JPEG', 

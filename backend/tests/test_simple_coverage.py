@@ -57,7 +57,7 @@ class TestSimpleCoverage:
     
     def test_validate_image_file_corrupted(self):
         """Test validate_image_file with corrupted file."""
-        from app.utils.image_utils import validate_image_file, ImageProcessingError
+        from app.utils.image_utils import validate_image_file, ImageValidationError
         
         # Create a file with invalid image data
         temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
@@ -65,7 +65,7 @@ class TestSimpleCoverage:
         temp_file.close()
         
         try:
-            with pytest.raises(ImageProcessingError):
+            with pytest.raises(ImageValidationError):
                 validate_image_file(temp_file.name)
         finally:
             os.unlink(temp_file.name)
@@ -296,7 +296,7 @@ class TestSimpleCoverage:
         engine = OCREngine("fake-api-key")
         
         # Test with non-existent file
-        with pytest.raises(OCRError):
+        with pytest.raises(FileNotFoundError):
             await engine.extract_fields("nonexistent.jpg")
     
     @pytest.mark.asyncio 

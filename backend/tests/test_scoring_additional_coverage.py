@@ -117,6 +117,12 @@ def sample_risk_score_data():
         },
         risk_factors=["font_inconsistency", "edge_artifacts"],
         confidence_level=0.82,
+        recommendation="HIGH",
+        detailed_breakdown={
+            "forensics_analysis": {"edge_score": 0.8, "compression_score": 0.7},
+            "ocr_analysis": {"field_confidence": 0.85, "text_clarity": 0.9},
+            "rule_analysis": {"violations": 2, "passed_checks": 8}
+        },
         recommendations=["Review document authenticity", "Check for tampering"],
         timestamp=datetime.now(timezone.utc)
     )

@@ -346,19 +346,9 @@ class TestRiskScoreCalculator:
 class TestRiskScoringAPI:
     """Test the risk scoring API endpoints."""
     
-    def setup_method(self):
-        """Set up test client."""
-        self.client = TestClient(app)
-    
-    @patch('app.api.v1.scoring.get_current_user')
     @patch('app.api.v1.scoring._get_user_analysis')
-    def test_calculate_risk_score_endpoint(self, mock_get_analysis, mock_get_user):
+    def test_calculate_risk_score_endpoint(self, mock_get_analysis, client):
         """Test risk score calculation endpoint."""
-        # Mock user
-        mock_user = Mock()
-        mock_user.id = "test-user-id"
-        mock_get_user.return_value = mock_user
-        
         # Mock analysis
         mock_analysis = Mock()
         mock_analysis.id = "test-analysis-id"
@@ -382,7 +372,7 @@ class TestRiskScoringAPI:
         mock_get_analysis.return_value = mock_analysis
         
         # Test request
-        response = self.client.post(
+        response = client.post(
             "/api/v1/scoring/calculate",
             json={"analysis_id": "test-analysis-id"},
             headers={"Authorization": "Bearer test-token"}
@@ -399,16 +389,10 @@ class TestRiskScoringAPI:
         assert 'confidence_level' in data
         assert 'recommendations' in data
     
-    @patch('app.api.v1.scoring.get_current_user')
-    def test_get_risk_score_config(self, mock_get_user):
+    def test_get_risk_score_config(self, client):
         """Test risk score configuration endpoint."""
-        # Mock user
-        mock_user = Mock()
-        mock_user.id = "test-user-id"
-        mock_get_user.return_value = mock_user
-        
         # Test request
-        response = self.client.get(
+        response = client.get(
             "/api/v1/scoring/config",
             headers={"Authorization": "Bearer test-token"}
         )
@@ -421,18 +405,21 @@ class TestRiskScoringAPI:
         assert 'confidence_factors' in data
         assert 'updated_at' in data
     
-    @patch('app.api.v1.scoring.get_current_user')
-    def test_unauthorized_access(self, mock_get_user):
+    def test_unauthorized_access(self):
         """Test unauthorized access to scoring endpoints."""
-        mock_get_user.side_effect = Exception("Unauthorized")
+        # Create a client without dependency overrides
+        from fastapi.testclient import TestClient
+        from app.main import app
         
-        # Test without authorization
-        response = self.client.post(
+        client = TestClient(app)
+        
+        # Test without authorization header
+        response = client.post(
             "/api/v1/scoring/calculate",
             json={"analysis_id": "test-analysis-id"}
         )
         
-        assert response.status_code == 500  # Should be handled by exception handler
+        assert response.status_code == 401  # Should be unauthorized
 
 
 class TestRiskScoringHelpers:

@@ -144,6 +144,9 @@ async def calculate_analysis_risk_score(
         logger.info(f"Risk score calculated for analysis {request.analysis_id}: {risk_score_data.overall_score}")
         return response
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) without modification
+        raise
     except Exception as e:
         logger.error(f"Risk score calculation failed for analysis {request.analysis_id}: {str(e)}")
         raise HTTPException(
