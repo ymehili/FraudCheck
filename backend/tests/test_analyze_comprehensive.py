@@ -40,6 +40,7 @@ class TestAnalyzeInternalFunctions:
             id="test_file",
             filename="test.jpg",
             s3_key="uploads/test.jpg",
+            s3_url="https://test-bucket.s3.amazonaws.com/uploads/test.jpg",
             content_type="image/jpeg",
             file_size=1024,
             user_id="test_user"
@@ -71,6 +72,7 @@ class TestAnalyzeInternalFunctions:
             id="test_file",
             filename="test.jpg",
             s3_key="uploads/test.jpg",
+            s3_url="https://test-bucket.s3.amazonaws.com/uploads/test.jpg",
             content_type="image/jpeg",
             file_size=1024,
             user_id="user1"

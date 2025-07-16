@@ -40,7 +40,7 @@ class S3Service:
 
     def generate_s3_key(self, user_id: str, filename: str) -> str:
         """Generate a unique S3 key for the file."""
-        file_id = str(uuid.uuid4())
+        file_id = uuid.uuid4().hex
         # Remove any path separators for security
         safe_filename = filename.replace('/', '_').replace('\\', '_')
         return f"uploads/{user_id}/{file_id}_{safe_filename}"

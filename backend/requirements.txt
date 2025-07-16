@@ -13,6 +13,7 @@ botocore
 python-jose[cryptography]
 python-dateutil
 clerk-backend-api
+passlib[bcrypt]
 pytest
 pytest-cov
 pytest-asyncio

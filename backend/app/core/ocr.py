@@ -97,7 +97,7 @@ class OCREngine:
         try:
             # Validate input
             if not os.path.exists(image_path):
-                raise OCRError(f"Image not found: {image_path}")
+                raise FileNotFoundError(f"Image not found: {image_path}")
             
             # Load and validate image
             image = await self._load_image(image_path)
@@ -141,12 +141,12 @@ class OCREngine:
             # Load image
             image = Image.open(image_path)
             
+            # Convert to RGB if needed (handles RGBA, P, etc.)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
             # Validate image format
             if image.format not in ['JPEG', 'PNG', 'WEBP']:
-                # Convert to JPEG if needed
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                
                 # Save as temporary JPEG
                 temp_path = f"{image_path}.temp.jpg"
                 image.save(temp_path, 'JPEG', quality=90)

@@ -83,7 +83,7 @@ def validate_image_file(file_path: str) -> Dict[str, Any]:
     except ImageProcessingError:
         raise  
     except Exception as e:
-        raise ImageProcessingError(f"Image validation failed: {str(e)}")
+        raise ImageValidationError(f"Image validation failed: {str(e)}")
 
 
 def normalize_image_format(file_path: str, target_format: str = 'JPEG', 

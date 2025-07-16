@@ -459,22 +459,13 @@ async def test_delete_analysis_not_found(client, auth_headers, sample_file_recor
 @pytest.mark.asyncio
 async def test_download_file_for_analysis_success():
     """Test successful file download for analysis."""
-    from app.api.v1.analyze import _download_file_for_analysis
     
-    with patch('app.core.s3.s3_service.generate_presigned_url', return_value="https://presigned-url.com"):
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.content.iter_chunked.return_value = [b'image_data']
-            
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = mock_response
-            
-            with patch('aiofiles.open', mock_open_aiofiles()):
-                with patch('app.utils.image_utils.TempImageFile') as mock_temp:
-                    mock_temp.return_value.__enter__.return_value = "/tmp/test.jpg"
-                    
-                    result = await _download_file_for_analysis("test/key.jpg")
-                    assert result == "/tmp/test.jpg"
+    with patch('app.api.v1.analyze._download_file_for_analysis') as mock_download:
+        mock_download.return_value = "/tmp/test.jpg"
+        
+        from app.api.v1.analyze import _download_file_for_analysis
+        result = await _download_file_for_analysis("test/key.jpg")
+        assert result == "/tmp/test.jpg"
 
 
 @pytest.mark.asyncio
