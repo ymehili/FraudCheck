@@ -35,18 +35,6 @@ fi
 print_status "Activating virtual environment..."
 source .venv/bin/activate
 
-# Set environment variables
-print_status "Setting environment variables..."
-export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-your-aws-access-key}
-export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-your-aws-secret-key}
-export AWS_REGION=us-east-1
-export S3_BUCKET_NAME=checkguard-uploads
-export CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2
-export CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ
-export PYTHONPATH=$(pwd)
-
-print_success "Environment configured!"
-
 # Start the server
 print_status "Starting FastAPI server on http://localhost:8000..."
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000

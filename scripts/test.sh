@@ -39,17 +39,6 @@ fi
 
 source .venv/bin/activate
 
-# Set test environment variables
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_REGION=us-east-1
-export S3_BUCKET_NAME=checkguard-uploads-test
-export AWS_ENDPOINT_URL=http://localhost:4566
-export CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2
-export CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ
-export PYTHONPATH=$(pwd)
-
-# Run backend tests
 python -m pytest tests/ -v --cov=app --cov-report=term-missing
 
 if [ $? -eq 0 ]; then

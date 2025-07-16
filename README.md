@@ -174,7 +174,7 @@ DATABASE_URL=postgresql+asyncpg://checkguard:checkguard@localhost:5432/checkguar
 # AWS S3 (LocalStack for development)
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
 S3_BUCKET_NAME=checkguard-uploads
 AWS_ENDPOINT_URL=http://localhost:4566
 
@@ -208,7 +208,7 @@ pip install -r requirements.txt
 alembic upgrade head
 
 # Start backend
-export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 S3_BUCKET_NAME=checkguard-uploads AWS_ENDPOINT_URL=http://localhost:4566 CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2 CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ PYTHONPATH=$(pwd)
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-2 S3_BUCKET_NAME=checkguard-uploads AWS_ENDPOINT_URL=http://localhost:4566 CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2 CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ PYTHONPATH=$(pwd)
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend setup (in another terminal)
