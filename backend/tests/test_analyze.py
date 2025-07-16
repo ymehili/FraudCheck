@@ -537,12 +537,9 @@ async def test_run_comprehensive_analysis_success(sample_forensics_result, sampl
                     ["forensics", "ocr", "rules"]
                 )
                 
-                assert "forensics" in result
-                assert "ocr" in result
-                assert "rules" in result
-                assert result["forensics"] == sample_forensics_result
-                assert result["ocr"] == sample_ocr_result
-                assert result["rules"] == sample_rule_result
+                assert result.forensics_result == sample_forensics_result
+                assert result.ocr_result == sample_ocr_result
+                assert result.rule_result == sample_rule_result
 
 
 @pytest.mark.asyncio
@@ -557,22 +554,22 @@ async def test_run_comprehensive_analysis_forensics_only(sample_forensics_result
             ["forensics"]
         )
         
-        assert "forensics" in result
-        assert "ocr" not in result
-        assert "rules" not in result
+        assert result.forensics_result == sample_forensics_result
+        assert result.ocr_result is None
+        assert result.rule_result is None
 
 
 @pytest.mark.asyncio
 async def test_store_analysis_results_success(db_session, sample_forensics_result, 
                                             sample_ocr_result, sample_rule_result):
     """Test successful analysis results storage."""
-    from app.api.v1.analyze import _store_analysis_results
+    from app.api.v1.analyze import _store_analysis_results, ComprehensiveAnalysisResult
     
-    analysis_result = {
-        "forensics": sample_forensics_result,
-        "ocr": sample_ocr_result,
-        "rules": sample_rule_result
-    }
+    analysis_result = ComprehensiveAnalysisResult(
+        forensics_result=sample_forensics_result,
+        ocr_result=sample_ocr_result,
+        rule_result=sample_rule_result
+    )
     
     stored_result = await _store_analysis_results("test-file-id", analysis_result, db_session)
     

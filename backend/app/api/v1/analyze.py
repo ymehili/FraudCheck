@@ -337,10 +337,12 @@ async def _validate_and_preprocess_image(file_path: str) -> str:
         )
 
 
-async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> dict:
+async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> ComprehensiveAnalysisResult:
     """Run comprehensive analysis on the image."""
     try:
-        results = {}
+        forensics_result = None
+        ocr_result = None
+        rule_result = None
         
         # Run analysis components in parallel
         tasks = []
@@ -357,17 +359,23 @@ async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> d
             task_results = await asyncio.gather(*[task[1] for task in tasks])
             
             for i, (task_name, _) in enumerate(tasks):
-                results[task_name] = task_results[i]
+                if task_name == "forensics":
+                    forensics_result = task_results[i]
+                elif task_name == "ocr":
+                    ocr_result = task_results[i]
         
         # Run rule engine if we have results
-        if "rules" in analysis_types and "forensics" in results and "ocr" in results:
+        if "rules" in analysis_types and forensics_result and ocr_result:
             rule_result = await rule_engine.process_results(
-                results["forensics"],
-                results["ocr"]
+                forensics_result,
+                ocr_result
             )
-            results["rules"] = rule_result
         
-        return results
+        return ComprehensiveAnalysisResult(
+            forensics_result=forensics_result,
+            ocr_result=ocr_result,
+            rule_result=rule_result
+        )
         
     except Exception as e:
         logger.error(f"Comprehensive analysis failed: {str(e)}")
@@ -377,14 +385,14 @@ async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> d
         )
 
 
-async def _store_analysis_results(file_id: str, analysis_result: dict, 
+async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAnalysisResult, 
                                  db: AsyncSession) -> AnalysisResult:
     """Store analysis results in database."""
     try:
         # Extract results
-        forensics_result = analysis_result.get("forensics")
-        ocr_result = analysis_result.get("ocr")
-        rule_result = analysis_result.get("rules")
+        forensics_result = analysis_result.forensics_result
+        ocr_result = analysis_result.ocr_result
+        rule_result = analysis_result.rule_result
         
         # Create analysis record
         analysis_record = AnalysisResult(
@@ -441,17 +449,17 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
     """Format analysis record into response."""
     try:
         # Extract stored data
-        extracted_fields = analysis_record.extracted_fields
-        rule_violations = analysis_record.rule_violations
+        extracted_fields = analysis_record.extracted_fields or {}
+        rule_violations = analysis_record.rule_violations or {}
         
         # Create response components
         from ...schemas.analysis import ForensicsResult, OCRResult, RuleEngineResult
         
         forensics_result = ForensicsResult(
-            edge_score=analysis_record.forensics_score,
+            edge_score=analysis_record.forensics_score or 0.0,
             compression_score=analysis_record.compression_artifacts.get('score', 0.0),
             font_score=analysis_record.font_analysis.get('score', 0.0),
-            overall_score=analysis_record.forensics_score,
+            overall_score=analysis_record.forensics_score or 0.0,
             detected_anomalies=analysis_record.edge_inconsistencies.get('anomalies', []),
             edge_inconsistencies=analysis_record.edge_inconsistencies,
             compression_artifacts=analysis_record.compression_artifacts,
@@ -467,24 +475,24 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
             check_number=extracted_fields.get('check_number'),
             memo=extracted_fields.get('memo'),
             signature_detected=extracted_fields.get('signature_detected', False),
-            extraction_confidence=analysis_record.ocr_confidence,
+            extraction_confidence=analysis_record.ocr_confidence or 0.0,
             field_confidences=extracted_fields.get('field_confidences', {})
         )
         
         rule_engine_result = RuleEngineResult(
-            risk_score=analysis_record.overall_risk_score,
+            risk_score=analysis_record.overall_risk_score or 0.0,
             violations=rule_violations.get('violations', []),
             passed_rules=rule_violations.get('passed_rules', []),
             rule_scores=rule_violations.get('rule_scores', {}),
-            confidence_factors=analysis_record.confidence_factors,
+            confidence_factors=analysis_record.confidence_factors or {},
             recommendations=rule_violations.get('recommendations', [])
         )
         
         # Calculate overall confidence
         overall_confidence = (
-            analysis_record.ocr_confidence * 0.4 +
-            analysis_record.forensics_score * 0.3 +
-            analysis_record.confidence_factors.get('overall', 0.0) * 0.3
+            (analysis_record.ocr_confidence or 0.0) * 0.4 +
+            (analysis_record.forensics_score or 0.0) * 0.3 +
+            (analysis_record.confidence_factors or {}).get('overall', 0.0) * 0.3
         )
         
         return AnalysisResponse(
