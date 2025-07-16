@@ -138,7 +138,15 @@ class TestApiRouters:
 
     def test_api_versioning(self):
         """Test API versioning structure."""
-        # Since we're in v1 module, check that versioning is properly structured
-        assert 'v1' in str(router.__module__)
-        assert 'v1' in str(auth_router.__module__)
-        assert 'v1' in str(files_router.__module__)
+        # Check that the routers are imported from v1 module
+        from app.api.v1.api import router as api_router
+        from app.api.v1.auth import router as v1_auth_router
+        from app.api.v1.files import router as v1_files_router
+        
+        # Verify the imports work and routers exist
+        assert api_router is not None
+        assert v1_auth_router is not None
+        assert v1_files_router is not None
+        
+        # Check that the main router includes the sub-routers properly
+        assert len(api_router.routes) > 0

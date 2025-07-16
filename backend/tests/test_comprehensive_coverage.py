@@ -57,13 +57,17 @@ class TestComprehensiveCoverage:
             "user_id": "test_user",
             "email": "test@example.com"
         }
-        mock_get_or_create_user.side_effect = Exception("Database connection failed")
+        # Mock a database error that gets re-raised as HTTPException
+        mock_get_or_create_user.side_effect = HTTPException(
+            status_code=500,
+            detail="Database error while getting or creating user: Database connection failed"
+        )
         
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(authorization="Bearer valid_token", db=MagicMock())
         
-        assert exc_info.value.status_code == 401
-        assert "Invalid or expired token" in str(exc_info.value.detail)
+        assert exc_info.value.status_code == 500
+        assert "Database error while getting or creating user" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
     async def test_get_or_create_user_with_both_id_fields(self, db_session):

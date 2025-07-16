@@ -111,26 +111,26 @@ class TestDeps:
         """Test get_or_create_user with user_id field."""
         user_data = {
             "user_id": "test_user_id",
-            "email": "test@example.com"
+            "email": "test_user_id@example.com"
         }
         
         result = await get_or_create_user(db_session, user_data)
         
         assert result.id == "test_user_id"
-        assert result.email == "test@example.com"
+        assert result.email == "test_user_id@example.com"
 
     @pytest.mark.asyncio
     async def test_get_or_create_user_id_field(self, db_session: AsyncSession):
         """Test get_or_create_user with id field."""
         user_data = {
             "id": "test_id",
-            "email": "test@example.com"
+            "email": "test_id@example.com"
         }
         
         result = await get_or_create_user(db_session, user_data)
         
         assert result.id == "test_id"
-        assert result.email == "test@example.com"
+        assert result.email == "test_id@example.com"
 
     @pytest.mark.asyncio
     async def test_get_or_create_user_missing_user_id(self, db_session: AsyncSession):

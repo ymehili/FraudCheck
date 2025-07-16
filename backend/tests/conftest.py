@@ -165,14 +165,11 @@ def setup_auth_for_all_tests():
 
 
 @pytest.fixture
-def test_user_data(request):
-    """Test user data with unique identifiers per test."""
-    test_name = request.node.name
-    unique_id = f"test-user-{hash(test_name) % 10000}"
-    unique_email = f"test{hash(test_name) % 10000}@example.com"
+def test_user_data():
+    """Test user data with consistent identifiers."""
     return {
-        'id': unique_id,
-        'email': unique_email
+        'id': 'test-user-4645',
+        'email': 'test@example.com'
     }
 
 
