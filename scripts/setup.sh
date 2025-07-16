@@ -64,7 +64,7 @@ fi
 print_success "All prerequisites are installed!"
 
 # Start Docker services
-print_status "Starting Docker services (PostgreSQL, LocalStack, Redis, pgAdmin)..."
+print_status "Starting Docker services (PostgreSQL, Redis, pgAdmin)..."
 docker-compose up -d
 
 # Wait for services to be ready
@@ -77,10 +77,6 @@ if ! docker ps | grep -q checkguard-postgres; then
     exit 1
 fi
 
-if ! docker ps | grep -q checkguard-localstack; then
-    print_error "LocalStack container failed to start"
-    exit 1
-fi
 
 print_success "Docker services are running!"
 
@@ -120,19 +116,8 @@ fi
 print_status "Running database migrations..."
 alembic upgrade head
 
-# Create S3 bucket in LocalStack
-print_status "Creating S3 bucket in LocalStack..."
-python3 -c "
-import boto3
-import time
-time.sleep(2)  # Give LocalStack a moment
-try:
-    s3_client = boto3.client('s3', endpoint_url='http://localhost:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1')
-    s3_client.create_bucket(Bucket='checkguard-uploads')
-    print('✅ S3 bucket created successfully')
-except Exception as e:
-    print(f'ℹ️  S3 bucket: {e}')
-"
+# Note: Ensure your AWS S3 bucket exists before running the backend
+print_warning "Make sure your AWS S3 bucket exists and credentials are configured"
 
 print_success "Backend setup completed!"
 

@@ -49,21 +49,6 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     restart: unless-stopped
 
-  # Optional: LocalStack for local AWS services
-  localstack:
-    image: localstack/localstack:latest
-    container_name: checkguard-localstack
-    ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=s3
-      - DEBUG=0
-      - DATA_DIR=/var/lib/localstack/data
-      - PERSISTENCE=1
-    volumes:
-      - localstack_data:/var/lib/localstack
-      - "/var/run/docker.sock:/var/run/docker.sock"
-    restart: unless-stopped
 
 volumes:
   postgres_data:
@@ -71,8 +56,6 @@ volumes:
   redis_data:
     driver: local
   pgadmin_data:
-    driver: local
-  localstack_data:
     driver: local
 
 networks:
