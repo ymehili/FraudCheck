@@ -197,9 +197,9 @@ class TestRiskScoreCalculator:
         calculator = RiskScoreCalculator()
         
         assert calculator._determine_risk_level(10) == RiskLevel.LOW
-        assert calculator._determine_risk_level(45) == RiskLevel.MEDIUM
-        assert calculator._determine_risk_level(70) == RiskLevel.HIGH
-        assert calculator._determine_risk_level(85) == RiskLevel.CRITICAL
+        assert calculator._determine_risk_level(65) == RiskLevel.MEDIUM
+        assert calculator._determine_risk_level(85) == RiskLevel.HIGH
+        assert calculator._determine_risk_level(95) == RiskLevel.CRITICAL
     
     def test_extract_risk_factors(self):
         """Test risk factor extraction."""

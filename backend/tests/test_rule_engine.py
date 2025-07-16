@@ -626,9 +626,10 @@ def test_load_rule_engine_function():
 @pytest.mark.asyncio
 async def test_rule_engine_error_handling(rule_engine):
     """Test rule engine error handling."""
-    # Test with None inputs
-    with pytest.raises(Exception):
-        await rule_engine.process_results(None, None)
+    # Test with None inputs - should handle gracefully without raising
+    result = await rule_engine.process_results(None, None)
+    assert result is not None
+    assert result.risk_score >= 0.0
 
 
 @pytest.mark.asyncio

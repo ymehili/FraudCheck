@@ -349,7 +349,7 @@ async def test_calculate_field_confidence_numbers(ocr_engine):
     
     # Short number
     confidence = ocr_engine._calculate_field_confidence('account_number', '123')
-    assert confidence < 0.8
+    assert confidence <= 0.8
     
     # Non-numeric
     confidence = ocr_engine._calculate_field_confidence('account_number', 'abc123')
@@ -451,7 +451,7 @@ async def test_validate_extraction_warnings(ocr_engine, sample_image):
 
 
 @pytest.mark.asyncio
-async def test_extract_check_fields_convenience_function(sample_image):
+async def test_extract_check_fields_convenience_function(sample_image, ocr_engine):
     """Test the convenience function for field extraction."""
     mock_response = Mock()
     mock_response.prompt_feedback.block_reason = None

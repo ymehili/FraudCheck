@@ -81,7 +81,7 @@ class TestMain:
         assert settings is not None
         assert hasattr(settings, 'DATABASE_URL')
 
-    @patch('app.main.get_db')
+    @patch('app.api.deps.get_db')
     def test_database_dependency(self, mock_get_db):
         """Test database dependency injection."""
         mock_get_db.return_value = MagicMock()
