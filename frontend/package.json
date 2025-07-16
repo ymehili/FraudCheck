@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.25.0",
+    "@heroicons/react": "^2.2.0",
+    "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
+    "html2canvas": "^1.4.1",
     "jspdf": "^3.0.1",
     "next": "15.4.1",
     "react": "19.1.0",

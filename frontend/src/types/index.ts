@@ -98,3 +98,76 @@ export interface SortOptions {
   field: 'upload_timestamp' | 'filename' | 'file_size' | 'risk_score';
   direction: 'asc' | 'desc';
 }
+
+// Risk scoring types
+export interface RiskScore {
+  overallScore: number;
+  categoryScores: {
+    forensics: number;
+    ocr: number;
+    rules: number;
+  };
+  riskFactors: string[];
+  confidenceLevel: number;
+  recommendation: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface RiskDistribution {
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+  total: number;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  count: number;
+  avgRisk: number;
+}
+
+export interface DashboardData {
+  totalAnalyses: number;
+  riskDistribution: RiskDistribution;
+  recentAnalyses: AnalysisResults[];
+  trendData: TrendDataPoint[];
+}
+
+export interface EnhancedAnalysisResult {
+  id: string;
+  fileId: string;
+  filename: string;
+  fileSize: number;
+  mimeType: string;
+  uploadTimestamp: string;
+  analysisTimestamp: string;
+  riskScore: RiskScore;
+  forensicsScore: number;
+  ocrConfidence: number;
+  overallRiskScore: number;
+  violations: string[];
+  processingTime?: number;
+}
+
+export interface DashboardFilter {
+  timeRange?: 'last_7_days' | 'last_30_days' | 'last_90_days' | 'last_year' | 'custom';
+  customDateRange?: {
+    start: string;
+    end: string;
+  };
+  riskScoreRange?: {
+    min: number;
+    max: number;
+  };
+  riskLevels?: ('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')[];
+  fileTypes?: string[];
+  hasViolations?: boolean;
+  minConfidence?: number;
+}
+
+export interface PaginationParams {
+  page: number;
+  perPage: number;
+  sortField?: string;
+  sortDirection?: 'asc' | 'desc';
+}
