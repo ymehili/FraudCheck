@@ -24,6 +24,11 @@ Thumbs.db
 .env.test.local
 .env.production.local
 .env.docker
+.env.production
+
+# Docker and containerization
+backups/
+logs/
 
 # Python
 __pycache__/
@@ -200,6 +205,9 @@ test-output/
 *.crt
 *.key
 
+# SSL certificates for nginx
+nginx/ssl/
+
 # Uploads (for development)
 uploads/
 static/uploads/
@@ -304,3 +312,4 @@ PROJECT.md
 .github/copilot-instructions.md
 backend/alembic/versions/
 PRPs
+.env.development

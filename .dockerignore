@@ -1,0 +1,57 @@
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Environment files
+.env*
+
+# Logs
+*.log
+logs/
+htmlcov/
+
+# Backups
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules
+node_modules/
+.next/
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Testing
+.pytest_cache/
+coverage/
+.coverage
+
+# Temporary files
+tmp/
+temp/
+
+# PRPs and project management files
+PRPs/
+PROJECT.md
+INITIAL.md
+CLAUDE.md
