@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class FileBase(BaseModel):
@@ -42,3 +42,19 @@ class FileListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class FileInfoResponse(BaseModel):
+    """Detailed file information including type-specific metadata"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    filename: str
+    file_type: str  # 'image', 'pdf', 'unknown'
+    mime_type: str
+    file_size: int
+    upload_timestamp: datetime
+    analysis_ready: bool
+    pages: int  # Number of pages (1 for images)
+    metadata: Optional[Dict[str, Any]] = None
+    supported_operations: list[str] = []

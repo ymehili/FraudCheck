@@ -45,6 +45,8 @@ class AnalysisRequest(BaseModel):
     """Schema for analysis request"""
     file_id: str
     analysis_types: List[str] = ["forensics", "ocr", "rules"]
+    page_number: Optional[int] = 1  # For PDF files, which page to analyze
+    pdf_options: Optional[Dict[str, Any]] = None  # Additional PDF processing options
     
     
 class AnalysisResponse(BaseModel):

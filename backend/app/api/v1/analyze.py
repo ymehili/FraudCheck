@@ -25,13 +25,15 @@ from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
 from ...core.rule_engine import load_rule_engine
 from ...core.s3 import s3_service
-from ...utils.image_utils import (
-    validate_image_file, 
-    normalize_image_format, 
-    enhance_image_quality,
-    TempImageFile,
-    cleanup_temp_files
+from ...utils.file_utils import (
+    validate_file_for_analysis,
+    prepare_file_for_analysis,
+    get_file_info,
+    TempAnalysisFile,
+    FileValidationError,
+    FileProcessingError
 )
+from ...utils.image_utils import cleanup_temp_files
 from ..deps import get_current_user
 
 router = APIRouter(tags=["analysis"])
@@ -85,12 +87,12 @@ async def analyze_check(
         temp_file_path = await _download_file_for_analysis(file_record.s3_key)
         
         try:
-            # Validate and preprocess image
-            await _validate_and_preprocess_image(temp_file_path)
+            # Validate and preprocess file (handles both images and PDFs)
+            prepared_file_path = await _validate_and_preprocess_file(temp_file_path, request.page_number or 1)
             
             # Run analysis components
             analysis_result = await _run_comprehensive_analysis(
-                temp_file_path, 
+                prepared_file_path, 
                 request.analysis_types
             )
             
@@ -105,13 +107,19 @@ async def analyze_check(
             response = await _format_analysis_response(analysis_record)
             
             # Clean up temporary files in background
-            background_tasks.add_task(cleanup_temp_files, [temp_file_path])
+            files_to_cleanup = [temp_file_path]
+            if prepared_file_path != temp_file_path:
+                files_to_cleanup.append(prepared_file_path)
+            background_tasks.add_task(cleanup_temp_files, files_to_cleanup)
             
             return response
             
         except Exception:
             # Clean up temporary files on error
-            cleanup_temp_files([temp_file_path])
+            files_to_cleanup = [temp_file_path]
+            if 'prepared_file_path' in locals() and prepared_file_path != temp_file_path:
+                files_to_cleanup.append(prepared_file_path)
+            cleanup_temp_files(files_to_cleanup)
             raise
             
     except HTTPException:
@@ -280,9 +288,14 @@ async def _download_file_for_analysis(s3_key: str) -> str:
         import aiohttp
         import aiofiles
         import tempfile
+        from pathlib import Path
         
-        # Create temporary file manually (don't use context manager)
-        temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        # Extract file extension from S3 key to preserve file type
+        s3_path = Path(s3_key)
+        file_extension = s3_path.suffix or '.tmp'
+        
+        # Create temporary file with correct extension
+        temp_file = tempfile.NamedTemporaryFile(suffix=file_extension, delete=False)
         temp_path = temp_file.name
         temp_file.close()  # Close the file handle but don't delete the file
         
@@ -309,36 +322,34 @@ async def _download_file_for_analysis(s3_key: str) -> str:
         )
 
 
-async def _validate_and_preprocess_image(file_path: str) -> str:
-    """Validate and preprocess image for analysis."""
+async def _validate_and_preprocess_file(file_path: str, page_number: int = 1) -> str:
+    """Validate and preprocess file for analysis."""
     try:
-        # Validate image file
-        validation_result = validate_image_file(file_path)
+        # Validate file (works for both images and PDFs)
+        validation_result = validate_file_for_analysis(file_path)
         
-        if not validation_result['valid']:
+        if not validation_result.get('valid', False):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid image file"
+                detail="Invalid file for analysis"
             )
         
-        # Normalize image format
-        normalized_path = normalize_image_format(file_path, 'JPEG', quality=95)
+        # Prepare file for analysis (converts PDF to image if needed)
+        prepared_path = prepare_file_for_analysis(file_path, page_number=page_number)
         
-        # Enhance image quality for better analysis
-        enhanced_path = enhance_image_quality(
-            normalized_path,
-            enhance_contrast=True,
-            enhance_sharpness=True,
-            enhance_brightness=False
-        )
+        return prepared_path
         
-        return enhanced_path
-        
-    except Exception as e:
-        logger.error(f"Image preprocessing failed: {str(e)}")
+    except (FileValidationError, FileProcessingError) as e:
+        logger.error(f"File preprocessing failed: {str(e)}")
         raise HTTPException(
             status_code=400,
-            detail=f"Image preprocessing failed: {str(e)}"
+            detail=f"File preprocessing failed: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"File preprocessing failed: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"File preprocessing failed: {str(e)}"
         )
 
 

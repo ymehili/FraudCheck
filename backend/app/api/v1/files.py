@@ -6,7 +6,7 @@ import uuid
 from ...database import get_db
 from ...models.user import User
 from ...models.file import FileRecord
-from ...schemas.file import FileResponse, FileUploadResponse, FileListResponse
+from ...schemas.file import FileResponse, FileUploadResponse, FileListResponse, FileInfoResponse
 from ...core.s3 import s3_service
 from ..deps import get_current_user
 
@@ -147,6 +147,94 @@ async def list_files(
         page=page,
         per_page=per_page
     )
+
+@router.get("/{file_id}/info", response_model=FileInfoResponse)
+async def get_file_info(
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed file information including type-specific metadata."""
+    
+    result = await db.execute(
+        select(FileRecord)
+        .where(FileRecord.id == file_id)
+        .where(FileRecord.user_id == current_user.id)
+    )
+    file_record = result.scalar_one_or_none()
+    
+    if not file_record:
+        raise HTTPException(
+            status_code=404,
+            detail="File not found"
+        )
+    
+    try:
+        # Download file temporarily to analyze
+        download_url = await s3_service.generate_presigned_url(file_record.s3_key)
+        if not download_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate download URL for analysis"
+            )
+        
+        import aiohttp
+        import tempfile
+        import aiofiles
+        from ...utils.file_utils import get_file_info, get_file_type
+        
+        # Download to temporary file
+        temp_file = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(download_url) as response:
+                    if response.status == 200:
+                        async with aiofiles.open(temp_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                await f.write(chunk)
+            
+            # Get detailed file information
+            file_info = get_file_info(temp_path)
+            file_type = file_info.get('file_type', 'unknown')
+            
+            # Determine supported operations
+            supported_operations = []
+            if file_info.get('analysis_ready', False):
+                supported_operations.extend(['analyze', 'download'])
+            
+            if file_type == 'pdf':
+                supported_operations.append('convert_to_images')
+            elif file_type == 'image':
+                supported_operations.extend(['enhance', 'resize', 'crop'])
+            
+            return FileInfoResponse(
+                id=file_record.id,
+                filename=file_record.filename,
+                file_type=file_type,
+                mime_type=file_record.mime_type,
+                file_size=file_record.file_size,
+                upload_timestamp=file_record.upload_timestamp,
+                analysis_ready=file_info.get('analysis_ready', False),
+                pages=file_info.get('pages', 1),
+                metadata=file_info.get('metadata', {}),
+                supported_operations=supported_operations
+            )
+            
+        finally:
+            # Clean up temporary file
+            import os
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze file: {str(e)}"
+        )
+
 
 @router.get("/{file_id}", response_model=FileResponse)
 async def get_file(

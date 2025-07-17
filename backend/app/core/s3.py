@@ -137,28 +137,24 @@ class S3Service:
 
     def validate_file(self, file: UploadFile) -> bool:
         """Validate file type and size."""
-        # Check file size
-        if file.size > settings.MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {settings.MAX_FILE_SIZE / (1024*1024):.1f}MB"
-            )
+        from ..utils.file_utils import validate_file_upload, FileValidationError
         
-        # Check file type
-        if file.content_type not in settings.ALLOWED_FILE_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_FILE_TYPES)}"
-            )
-        
-        # Check filename
-        if not file.filename:
+        try:
+            # Use the unified file validation
+            validate_file_upload(file.filename, file.content_type, file.size)
+            return True
+            
+        except FileValidationError as e:
             raise HTTPException(
                 status_code=400,
-                detail="Filename is required"
+                detail=str(e)
             )
-        
-        return True
+        except Exception as e:
+            logger.error(f"File validation failed: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"File validation failed: {str(e)}"
+            )
 
 # Create global S3 service instance
 s3_service = S3Service()
