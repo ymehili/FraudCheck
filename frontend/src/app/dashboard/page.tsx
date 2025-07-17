@@ -5,6 +5,10 @@ import { useAuth } from '@clerk/nextjs';
 import Link from 'next/link';
 import RiskScoreChart from '@/components/RiskScoreChart';
 import { RiskDistribution, TrendDataPoint } from '@/types';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface DashboardStats {
   totalAnalyses: number;
@@ -69,75 +73,86 @@ export default function DashboardPage() {
     icon: React.ReactNode;
     trend?: { value: number; label: string };
   }) => (
-    <div className="bg-white rounded-lg shadow-sm border p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-semibold text-gray-900">{value}</p>
-          {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+    <Card>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-semibold text-foreground">{value}</p>
+            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          </div>
+          <div className="text-muted-foreground">
+            {icon}
+          </div>
         </div>
-        <div className="text-gray-400">
-          {icon}
-        </div>
-      </div>
-      {trend && (
-        <div className="mt-4 flex items-center">
-          <span className={`text-sm font-medium ${trend.value > 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {trend.value > 0 ? '+' : ''}{trend.value}%
-          </span>
-          <span className="text-sm text-gray-500 ml-2">{trend.label}</span>
-        </div>
-      )}
-    </div>
+        {trend && (
+          <div className="mt-4 flex items-center">
+            <span className={`text-sm font-medium ${trend.value > 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {trend.value > 0 ? '+' : ''}{trend.value}%
+            </span>
+            <span className="text-sm text-muted-foreground ml-2">{trend.label}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 
   const RiskDistributionChart = ({ distribution }: { distribution: RiskDistribution }) => (
-    <div className="bg-white rounded-lg shadow-sm border p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Risk Distribution</h3>
-      <div className="space-y-4">
-        {[
-          { level: 'LOW', count: distribution.low, color: 'bg-green-500' },
-          { level: 'MEDIUM', count: distribution.medium, color: 'bg-yellow-500' },
-          { level: 'HIGH', count: distribution.high, color: 'bg-red-500' },
-          { level: 'CRITICAL', count: distribution.critical, color: 'bg-red-600' }
-        ].map((item) => {
-          const percentage = distribution.total > 0 ? (item.count / distribution.total) * 100 : 0;
-          return (
-            <div key={item.level} className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                <span className="text-sm font-medium text-gray-700">{item.level}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-32 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${item.color}`}
-                    style={{ width: `${percentage}%` }}
-                  ></div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Risk Distribution</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {[
+            { level: 'LOW', count: distribution.low, color: 'bg-green-500' },
+            { level: 'MEDIUM', count: distribution.medium, color: 'bg-yellow-500' },
+            { level: 'HIGH', count: distribution.high, color: 'bg-red-500' },
+            { level: 'CRITICAL', count: distribution.critical, color: 'bg-red-600' }
+          ].map((item) => {
+            const percentage = distribution.total > 0 ? (item.count / distribution.total) * 100 : 0;
+            return (
+              <div key={item.level} className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                  <span className="text-sm font-medium text-foreground">{item.level}</span>
                 </div>
-                <span className="text-sm text-gray-600 w-12 text-right">{item.count}</span>
+                <div className="flex items-center space-x-3">
+                  <div className="w-32 bg-muted rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full ${item.color}`}
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-sm text-muted-foreground w-12 text-right">{item.count}</span>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm border p-6">
-              <div className="animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
-              </div>
-            </div>
+            <Card key={i}>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </div>
@@ -148,25 +163,27 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
+        <Alert variant="destructive">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <AlertDescription>
             <div>
-              <h3 className="text-sm font-medium text-red-800">Error loading dashboard</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <h3 className="text-sm font-medium">Error loading dashboard</h3>
+              <p className="text-sm mt-1">{error}</p>
             </div>
-          </div>
-          <button
-            onClick={fetchDashboardData}
-            className="mt-4 px-4 py-2 bg-red-100 text-red-800 rounded-md hover:bg-red-200 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
+            <Button
+              onClick={fetchDashboardData}
+              variant="outline"
+              size="sm"
+              className="mt-4"
+            >
+              Try Again
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -175,11 +192,13 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <p className="text-gray-600">No dashboard data available</p>
-        </div>
+        <Card>
+          <CardContent className="text-center">
+            <p className="text-muted-foreground">No dashboard data available</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -189,14 +208,13 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Overview of your check analysis activity</p>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">Overview of your check analysis activity</p>
         </div>
-        <Link
-          href="/upload"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Upload New Check
+        <Link href="/upload">
+          <Button variant="primary">
+            Upload New Check
+          </Button>
         </Link>
       </div>
 
@@ -270,78 +288,82 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link
-          href="/upload"
-          className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Upload Check</h3>
-              <p className="text-sm text-gray-600">Start a new fraud analysis</p>
-            </div>
-          </div>
+        <Link href="/upload">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent>
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">Upload Check</h3>
+                  <p className="text-sm text-muted-foreground">Start a new fraud analysis</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </Link>
 
-        <Link
-          href="/history"
-          className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">View History</h3>
-              <p className="text-sm text-gray-600">Browse past analyses</p>
-            </div>
-          </div>
+        <Link href="/history">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent>
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">View History</h3>
+                  <p className="text-sm text-muted-foreground">Browse past analyses</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </Link>
 
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
+        <Card>
+          <CardContent>
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-foreground">Analytics</h3>
+                <p className="text-sm text-muted-foreground">Detailed insights and trends</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
-              <p className="text-sm text-gray-600">Detailed insights and trends</p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <Card>
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+            <CardTitle>Recent Activity</CardTitle>
             <Link
               href="/history"
-              className="text-sm text-blue-600 hover:text-blue-700"
+              className="text-sm text-primary hover:text-primary/80"
             >
               View all
             </Link>
           </div>
-        </div>
-        <div className="p-6">
-          <div className="text-center text-gray-500">
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground">
             <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <p className="text-sm">No recent activity</p>
-            <p className="text-xs text-gray-400 mt-1">Upload a check to get started</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Upload a check to get started</p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

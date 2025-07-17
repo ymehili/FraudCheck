@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { DashboardFilter } from '@/types';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface FilterControlsProps {
   filters: DashboardFilter;
@@ -118,40 +122,43 @@ export default function FilterControls({
   };
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border ${className}`}>
-      <div className="px-6 py-4 border-b border-gray-200">
+    <Card className={className}>
+      <CardHeader>
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Filter Analyses</h3>
+          <CardTitle>Filter Analyses</CardTitle>
           <div className="flex items-center space-x-2">
             {hasActiveFilters() && (
-              <button
+              <Button
                 onClick={onReset}
-                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                variant="ghost"
+                size="sm"
               >
                 Reset All
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+              variant="ghost"
+              size="sm"
             >
               {isExpanded ? 'Hide Filters' : 'Show Filters'}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </CardHeader>
 
       {isExpanded && (
-        <div className="p-6 space-y-6">
+        <CardContent className="space-y-6">
           {/* Time Range Filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label htmlFor="time-range" className="text-sm font-medium">
               Time Range
-            </label>
+            </Label>
             <select
+              id="time-range"
               value={localFilters.timeRange || ''}
               onChange={(e) => handleFilterChange('timeRange', e.target.value as 'last_7_days' | 'last_30_days' | 'last_90_days' | 'last_year' | 'custom' || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
             >
               {TIME_RANGE_OPTIONS.map(option => (
                 <option key={option.value} value={option.value}>
@@ -165,25 +172,25 @@ export default function FilterControls({
           {localFilters.timeRange === 'custom' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Label htmlFor="start-date" className="text-sm font-medium">
                   Start Date
-                </label>
-                <input
+                </Label>
+                <Input
+                  id="start-date"
                   type="date"
                   value={localFilters.customDateRange?.start ? formatDate(localFilters.customDateRange.start) : ''}
                   onChange={(e) => handleDateRangeChange('start', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Label htmlFor="end-date" className="text-sm font-medium">
                   End Date
-                </label>
-                <input
+                </Label>
+                <Input
+                  id="end-date"
                   type="date"
                   value={localFilters.customDateRange?.end ? formatDate(localFilters.customDateRange.end) : ''}
                   onChange={(e) => handleDateRangeChange('end', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -191,32 +198,32 @@ export default function FilterControls({
 
           {/* Risk Score Range */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="text-sm font-medium">
               Risk Score Range
-            </label>
+            </Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Minimum</label>
-                <input
+                <Label htmlFor="min-score" className="text-xs text-muted-foreground">Minimum</Label>
+                <Input
+                  id="min-score"
                   type="number"
                   min="0"
                   max="100"
                   placeholder="0"
                   value={localFilters.riskScoreRange?.min || ''}
                   onChange={(e) => handleRiskScoreChange('min', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Maximum</label>
-                <input
+                <Label htmlFor="max-score" className="text-xs text-muted-foreground">Maximum</Label>
+                <Input
+                  id="max-score"
                   type="number"
                   min="0"
                   max="100"
                   placeholder="100"
                   value={localFilters.riskScoreRange?.max || ''}
                   onChange={(e) => handleRiskScoreChange('max', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -224,90 +231,92 @@ export default function FilterControls({
 
           {/* Risk Levels */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="text-sm font-medium">
               Risk Levels
-            </label>
+            </Label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {RISK_LEVELS.map(level => (
-                <button
+                <Button
                   key={level.value}
                   onClick={() => handleRiskLevelToggle(level.value)}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  variant={localFilters.riskLevels?.includes(level.value) ? "primary" : "outline"}
+                  size="sm"
+                  className={
                     localFilters.riskLevels?.includes(level.value)
                       ? level.color
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                      : ''
+                  }
                 >
                   {level.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
 
           {/* File Types */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="text-sm font-medium">
               File Types
-            </label>
+            </Label>
             <div className="space-y-2">
               {FILE_TYPES.map(type => (
-                <label key={type.value} className="flex items-center">
+                <Label key={type.value} className="flex items-center">
                   <input
                     type="checkbox"
                     checked={localFilters.fileTypes?.includes(type.value) || false}
                     onChange={() => handleFileTypeToggle(type.value)}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="h-4 w-4 text-primary border-input rounded focus:ring-ring"
                   />
-                  <span className="ml-2 text-sm text-gray-700">{type.label}</span>
-                </label>
+                  <span className="ml-2 text-sm text-foreground">{type.label}</span>
+                </Label>
               ))}
             </div>
           </div>
 
           {/* Violations Filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="text-sm font-medium">
               Violations
-            </label>
+            </Label>
             <div className="space-y-2">
-              <label className="flex items-center">
+              <Label className="flex items-center">
                 <input
                   type="radio"
                   name="violations"
                   checked={localFilters.hasViolations === undefined}
                   onChange={() => handleFilterChange('hasViolations', undefined)}
-                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  className="h-4 w-4 text-primary border-input focus:ring-ring"
                 />
-                <span className="ml-2 text-sm text-gray-700">All</span>
-              </label>
-              <label className="flex items-center">
+                <span className="ml-2 text-sm text-foreground">All</span>
+              </Label>
+              <Label className="flex items-center">
                 <input
                   type="radio"
                   name="violations"
                   checked={localFilters.hasViolations === true}
                   onChange={() => handleFilterChange('hasViolations', true)}
-                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  className="h-4 w-4 text-primary border-input focus:ring-ring"
                 />
-                <span className="ml-2 text-sm text-gray-700">Has Violations</span>
-              </label>
-              <label className="flex items-center">
+                <span className="ml-2 text-sm text-foreground">Has Violations</span>
+              </Label>
+              <Label className="flex items-center">
                 <input
                   type="radio"
                   name="violations"
                   checked={localFilters.hasViolations === false}
                   onChange={() => handleFilterChange('hasViolations', false)}
-                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  className="h-4 w-4 text-primary border-input focus:ring-ring"
                 />
-                <span className="ml-2 text-sm text-gray-700">No Violations</span>
-              </label>
+                <span className="ml-2 text-sm text-foreground">No Violations</span>
+              </Label>
             </div>
           </div>
 
           {/* Confidence Threshold */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Label className="text-sm font-medium">
               Minimum Confidence Level
-            </label>
+            </Label>
             <div className="flex items-center space-x-4">
               <input
                 type="range"
@@ -321,30 +330,31 @@ export default function FilterControls({
                 }}
                 className="flex-1"
               />
-              <span className="text-sm text-gray-600 w-12">
+              <span className="text-sm text-muted-foreground w-12">
                 {localFilters.minConfidence ? Math.round(localFilters.minConfidence * 100) : 0}%
               </span>
             </div>
           </div>
-        </div>
+        </CardContent>
       )}
 
       {/* Active Filters Summary */}
       {hasActiveFilters() && (
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+        <CardContent className="bg-muted/50 border-t">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-foreground">
               {Object.keys(localFilters).filter(key => localFilters[key as keyof DashboardFilter] !== undefined).length} filter(s) active
             </span>
-            <button
+            <Button
               onClick={onReset}
-              className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+              variant="ghost"
+              size="sm"
             >
               Clear All
-            </button>
+            </Button>
           </div>
-        </div>
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }

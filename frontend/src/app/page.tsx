@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import Button from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
 
 export default function Home() {
   return (
@@ -12,19 +14,18 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <SignedIn>
-                <Link
-                  href="/upload"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                >
-                  Upload Check
+                <Link href="/upload">
+                  <Button variant="primary" size="sm">
+                    Upload Check
+                  </Button>
                 </Link>
                 <UserButton afterSignOutUrl="/" />
               </SignedIn>
               <SignedOut>
                 <SignInButton mode="modal">
-                  <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                  <Button variant="primary" size="sm">
                     Sign In
-                  </button>
+                  </Button>
                 </SignInButton>
               </SignedOut>
             </div>
@@ -44,42 +45,47 @@ export default function Home() {
           
           <div className="mt-10 flex items-center justify-center gap-x-6">
             <SignedIn>
-              <Link
-                href="/upload"
-                className="rounded-md bg-blue-600 px-6 py-3 text-lg font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                Start Analysis
+              <Link href="/upload">
+                <Button variant="primary" size="lg">
+                  Start Analysis
+                </Button>
               </Link>
             </SignedIn>
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="rounded-md bg-blue-600 px-6 py-3 text-lg font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                <Button variant="primary" size="lg">
                   Get Started
-                </button>
+                </Button>
               </SignInButton>
             </SignedOut>
           </div>
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Image Analysis</h3>
-            <p className="text-gray-600">
-              Advanced computer vision algorithms analyze check images for signs of tampering, alteration, or forgery.
-            </p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">OCR Extraction</h3>
-            <p className="text-gray-600">
-              Extract and verify key information like amounts, dates, signatures, and account numbers automatically.
-            </p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Risk Scoring</h3>
-            <p className="text-gray-600">
-              Get comprehensive risk assessments with detailed reports and actionable insights.
-            </p>
-          </div>
+          <Card>
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold text-foreground mb-2">Image Analysis</h3>
+              <p className="text-muted-foreground">
+                Advanced computer vision algorithms analyze check images for signs of tampering, alteration, or forgery.
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold text-foreground mb-2">OCR Extraction</h3>
+              <p className="text-muted-foreground">
+                Extract and verify key information like amounts, dates, signatures, and account numbers automatically.
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold text-foreground mb-2">Risk Scoring</h3>
+              <p className="text-muted-foreground">
+                Get comprehensive risk assessments with detailed reports and actionable insights.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </main>
 

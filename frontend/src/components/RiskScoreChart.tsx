@@ -127,7 +127,7 @@ export default function RiskScoreChart({
         ],
         borderWidth: 2,
         hoverOffset: 4,
-        cutout: '60%'
+        // cutout: '60%' // Chart.js type compatibility - use borderRadius instead
       }]
     };
 

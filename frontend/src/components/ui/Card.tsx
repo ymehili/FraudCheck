@@ -1,6 +1,7 @@
-import React from 'react';
-import { cn } from '@/lib/utils';
+import * as React from "react"
+import { cn } from "@/lib/utils"
 
+// Wrapper components that maintain existing interface
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'outlined' | 'elevated';
   padding?: 'none' | 'sm' | 'md' | 'lg';
@@ -14,27 +15,27 @@ const Card: React.FC<CardProps> = ({
   children,
   ...props
 }) => {
-  const baseStyles = 'bg-white rounded-lg';
-  
-  const variantStyles = {
-    default: 'border border-gray-200',
-    outlined: 'border-2 border-gray-300',
-    elevated: 'shadow-lg border border-gray-100',
+  // Map variants to appropriate classes
+  const variantClasses = {
+    default: 'border shadow-sm',
+    outlined: 'border-2 shadow-sm',
+    elevated: 'border shadow-lg',
   };
 
-  const paddingStyles = {
-    none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+  // Map padding to appropriate classes
+  const paddingClasses = {
+    none: 'py-0',
+    sm: 'py-4',
+    md: 'py-6',
+    lg: 'py-8',
   };
 
   return (
     <div
       className={cn(
-        baseStyles,
-        variantStyles[variant],
-        paddingStyles[padding],
+        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl',
+        variantClasses[variant],
+        paddingClasses[padding],
         className
       )}
       {...props}
@@ -50,7 +51,7 @@ interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const CardHeader: React.FC<CardHeaderProps> = ({ className, children, ...props }) => {
   return (
-    <div className={cn('mb-4', className)} {...props}>
+    <div className={cn('mb-4 px-6', className)} {...props}>
       {children}
     </div>
   );
@@ -62,7 +63,7 @@ interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
 
 const CardTitle: React.FC<CardTitleProps> = ({ className, children, ...props }) => {
   return (
-    <h3 className={cn('text-lg font-semibold text-gray-900', className)} {...props}>
+    <h3 className={cn('text-lg font-semibold text-card-foreground', className)} {...props}>
       {children}
     </h3>
   );
@@ -74,7 +75,7 @@ interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const CardContent: React.FC<CardContentProps> = ({ className, children, ...props }) => {
   return (
-    <div className={cn('text-gray-600', className)} {...props}>
+    <div className={cn('text-muted-foreground px-6', className)} {...props}>
       {children}
     </div>
   );
@@ -86,7 +87,7 @@ interface CardFooterProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const CardFooter: React.FC<CardFooterProps> = ({ className, children, ...props }) => {
   return (
-    <div className={cn('mt-6 pt-4 border-t border-gray-200', className)} {...props}>
+    <div className={cn('mt-6 pt-4 border-t border-border px-6', className)} {...props}>
       {children}
     </div>
   );

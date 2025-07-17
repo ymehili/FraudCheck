@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, EyeIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { EnhancedAnalysisResult, PaginationParams } from '@/types';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface AnalysisHistoryProps {
   analyses: EnhancedAnalysisResult[];
@@ -14,13 +18,6 @@ interface AnalysisHistoryProps {
   isLoading?: boolean;
   className?: string;
 }
-
-const RISK_LEVEL_COLORS = {
-  LOW: 'bg-green-100 text-green-800',
-  MEDIUM: 'bg-yellow-100 text-yellow-800',
-  HIGH: 'bg-red-100 text-red-800',
-  CRITICAL: 'bg-red-200 text-red-900'
-};
 
 const SORT_FIELDS = {
   filename: 'Filename',
@@ -100,39 +97,39 @@ export default function AnalysisHistory({
 
   if (isLoading) {
     return (
-      <div className={`bg-white rounded-lg shadow-sm border ${className}`}>
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading analysis history...</p>
-        </div>
-      </div>
+      <Card className={className}>
+        <CardContent className="text-center space-y-4">
+          <Skeleton className="h-8 w-8 rounded-full mx-auto" />
+          <Skeleton className="h-4 w-48 mx-auto" />
+        </CardContent>
+      </Card>
     );
   }
 
   if (analyses.length === 0) {
     return (
-      <div className={`bg-white rounded-lg shadow-sm border ${className}`}>
-        <div className="p-6 text-center">
-          <div className="text-gray-400 mb-4">
+      <Card className={className}>
+        <CardContent className="text-center">
+          <div className="text-muted-foreground mb-4">
             <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No analyses found</h3>
-          <p className="text-gray-600">Start by uploading a check image for analysis.</p>
-        </div>
-      </div>
+          <h3 className="text-lg font-medium text-foreground mb-2">No analyses found</h3>
+          <p className="text-muted-foreground">Start by uploading a check image for analysis.</p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className={`bg-white rounded-lg shadow-sm border ${className}`}>
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Analysis History</h3>
-        <p className="text-sm text-gray-600 mt-1">
+    <Card className={className}>
+      <CardHeader>
+        <CardTitle>Analysis History</CardTitle>
+        <p className="text-sm text-muted-foreground">
           Showing {analyses.length} of {pagination.page * pagination.perPage} analyses
         </p>
-      </div>
+      </CardHeader>
 
       <div className="overflow-x-auto">
         <table className="w-full divide-y divide-gray-200">
@@ -204,11 +201,13 @@ export default function AnalysisHistory({
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    RISK_LEVEL_COLORS[analysis.riskScore.recommendation]
-                  }`}>
+                  <Badge variant={
+                    analysis.riskScore.recommendation === 'LOW' ? 'default' :
+                    analysis.riskScore.recommendation === 'MEDIUM' ? 'secondary' :
+                    'destructive'
+                  }>
                     {analysis.riskScore.recommendation}
-                  </span>
+                  </Badge>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {formatFileSize(analysis.fileSize)}
@@ -262,20 +261,22 @@ export default function AnalysisHistory({
       <div className="px-6 py-4 border-t border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex-1 flex justify-between sm:hidden">
-            <button
+            <Button
               onClick={() => onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
-              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="outline"
+              size="sm"
             >
               Previous
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => onPageChange(pagination.page + 1)}
               disabled={pagination.page >= Math.ceil(pagination.page)}
-              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="outline"
+              size="sm"
             >
               Next
-            </button>
+            </Button>
           </div>
           
           <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
@@ -290,40 +291,42 @@ export default function AnalysisHistory({
             </div>
             <div>
               <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                <button
+                <Button
                   onClick={() => onPageChange(pagination.page - 1)}
                   disabled={pagination.page <= 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-l-md rounded-r-none"
                 >
                   <ChevronUpIcon className="h-5 w-5 rotate-90" />
-                </button>
+                </Button>
                 
                 {generatePageNumbers().map((pageNum, index) => (
-                  <button
+                  <Button
                     key={index}
                     onClick={() => onPageChange(pageNum)}
-                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                      pageNum === pagination.page
-                        ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                    }`}
+                    variant={pageNum === pagination.page ? "primary" : "outline"}
+                    size="sm"
+                    className="rounded-none"
                   >
                     {pageNum}
-                  </button>
+                  </Button>
                 ))}
                 
-                <button
+                <Button
                   onClick={() => onPageChange(pagination.page + 1)}
                   disabled={pagination.page >= Math.ceil(pagination.page)}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-r-md rounded-l-none"
                 >
                   <ChevronDownIcon className="h-5 w-5 -rotate-90" />
-                </button>
+                </Button>
               </nav>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

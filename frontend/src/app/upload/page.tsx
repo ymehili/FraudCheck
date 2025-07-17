@@ -6,6 +6,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CameraCapture from '@/components/CameraCapture';
 import FileUpload from '@/components/FileUpload';
+import Button from '@/components/ui/Button';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 
 type UploadMethod = 'camera' | 'file';
 
@@ -139,120 +143,109 @@ export default function UploadPage() {
         {/* Upload Method Selection */}
         <div className="mb-8">
           <div className="flex space-x-4">
-            <button
+            <Button
               onClick={() => setUploadMethod('file')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                uploadMethod === 'file'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              variant={uploadMethod === 'file' ? 'primary' : 'outline'}
+              size="sm"
             >
               Upload File
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setUploadMethod('camera')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                uploadMethod === 'camera'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              variant={uploadMethod === 'camera' ? 'primary' : 'outline'}
+              size="sm"
             >
               Use Camera
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-            <div className="flex">
-              <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              <div className="ml-3">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            </div>
-          </div>
+          <Alert variant="destructive" className="mb-6">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <AlertDescription>
+              {error}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Success Message */}
         {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
-            <div className="flex">
-              <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="ml-3">
-                <p className="text-sm text-green-800">{success}</p>
-              </div>
-            </div>
-          </div>
+          <Alert className="mb-6">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <AlertDescription>
+              {success}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Upload Progress */}
         {isUploading && (
           <div className="mb-6">
-            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
               <span>Uploading...</span>
               <span>{uploadProgress}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
+            <Progress value={uploadProgress} className="w-full" />
           </div>
         )}
 
         {/* Upload Component */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          {uploadMethod === 'file' ? (
-            <FileUpload
-              onFileSelect={handleFileSelect}
-              onError={handleError}
-              acceptedTypes={['image/jpeg', 'image/png', 'application/pdf']}
-              maxFileSize={10 * 1024 * 1024} // 10MB
-            />
-          ) : (
-            <CameraCapture
-              onCapture={handleFileCapture}
-              onError={handleError}
-            />
-          )}
-        </div>
+        <Card>
+          <CardContent className="p-6">
+            {uploadMethod === 'file' ? (
+              <FileUpload
+                onFileSelect={handleFileSelect}
+                onError={handleError}
+                acceptedTypes={['image/jpeg', 'image/png', 'application/pdf']}
+                maxFileSize={10 * 1024 * 1024} // 10MB
+              />
+            ) : (
+              <CameraCapture
+                onCapture={handleFileCapture}
+                onError={handleError}
+              />
+            )}
+          </CardContent>
+        </Card>
 
         {/* Instructions */}
-        <div className="mt-8 bg-blue-50 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-3">Tips for Best Results</h3>
-          <ul className="text-sm text-blue-800 space-y-2">
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Ensure the entire check is visible and in focus
-            </li>
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Use good lighting and avoid shadows
-            </li>
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Keep the check flat and avoid glare
-            </li>
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Supported formats: JPG, PNG, PDF (up to 10MB)
-            </li>
-          </ul>
-        </div>
+        <Card className="mt-8 bg-blue-50">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-3">Tips for Best Results</h3>
+            <ul className="text-sm text-blue-800 space-y-2">
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Ensure the entire check is visible and in focus
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Use good lighting and avoid shadows
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Keep the check flat and avoid glare
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Supported formats: JPG, PNG, PDF (up to 10MB)
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

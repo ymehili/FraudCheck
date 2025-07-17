@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import AnalysisHistory from '@/components/AnalysisHistory';
 import FilterControls from '@/components/FilterControls';
 import { EnhancedAnalysisResult, DashboardFilter, PaginationParams } from '@/types';
+import { Card, CardContent } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function HistoryPage() {
   const { getToken } = useAuth();
@@ -221,19 +224,20 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analysis History</h1>
-          <p className="text-gray-600">Review and manage your check analysis results</p>
+          <h1 className="text-2xl font-bold text-foreground">Analysis History</h1>
+          <p className="text-muted-foreground">Review and manage your check analysis results</p>
         </div>
         <div className="flex items-center space-x-4">
-          <button
+          <Button
             onClick={fetchAnalysisHistory}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            variant="outline"
+            size="sm"
           >
             <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -246,23 +250,25 @@ export default function HistoryPage() {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <svg className="w-5 h-5 text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
+        <Alert variant="destructive">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <AlertDescription>
             <div>
-              <h3 className="text-sm font-medium text-red-800">Error loading history</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <h3 className="text-sm font-medium">Error loading history</h3>
+              <p className="text-sm mt-1">{error}</p>
             </div>
-          </div>
-          <button
-            onClick={fetchAnalysisHistory}
-            className="mt-3 px-4 py-2 bg-red-100 text-red-800 rounded-md hover:bg-red-200 transition-colors text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+            <Button
+              onClick={fetchAnalysisHistory}
+              variant="outline"
+              size="sm"
+              className="mt-3"
+            >
+              Try Again
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Analysis History Table */}
@@ -278,68 +284,72 @@ export default function HistoryPage() {
 
       {/* Empty State */}
       {!isLoading && !error && analyses.length === 0 && (
-        <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
-          <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No analyses found</h3>
-          <p className="text-gray-600 mb-6">
-            {Object.keys(filters).length > 0 
-              ? 'No analyses match your current filters. Try adjusting your search criteria.'
-              : 'You haven\'t analyzed any checks yet. Upload a check to get started.'
-            }
-          </p>
-          <div className="flex justify-center space-x-4">
-            {Object.keys(filters).length > 0 && (
-              <button
-                onClick={handleFiltersReset}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        <Card className="p-12 text-center">
+          <CardContent>
+            <svg className="w-16 h-16 text-muted-foreground mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h3 className="text-lg font-medium text-foreground mb-2">No analyses found</h3>
+            <p className="text-muted-foreground mb-6">
+              {Object.keys(filters).length > 0 
+                ? 'No analyses match your current filters. Try adjusting your search criteria.'
+                : 'You haven\'t analyzed any checks yet. Upload a check to get started.'
+              }
+            </p>
+            <div className="flex justify-center space-x-4">
+              {Object.keys(filters).length > 0 && (
+                <Button
+                  onClick={handleFiltersReset}
+                  variant="outline"
+                >
+                  Clear Filters
+                </Button>
+              )}
+              <Button
+                onClick={() => router.push('/upload')}
+                variant="primary"
               >
-                Clear Filters
-              </button>
-            )}
-            <button
-              onClick={() => router.push('/upload')}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Upload Check
-            </button>
-          </div>
-        </div>
+                Upload Check
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Results Summary */}
       {!isLoading && !error && analyses.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>
-              Showing {analyses.length} result{analyses.length !== 1 ? 's' : ''}
-              {Object.keys(filters).length > 0 && ' with active filters'}
-            </span>
-            <div className="flex items-center space-x-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
-                Page {pagination.page} of {Math.ceil(pagination.page)}
+                Showing {analyses.length} result{analyses.length !== 1 ? 's' : ''}
+                {Object.keys(filters).length > 0 && ' with active filters'}
               </span>
-              <div className="flex items-center space-x-2">
-                <label className="text-sm text-gray-600">Show:</label>
-                <select
-                  value={pagination.perPage}
-                  onChange={(e) => setPagination(prev => ({ 
-                    ...prev, 
-                    perPage: parseInt(e.target.value),
-                    page: 1 
-                  }))}
-                  className="text-sm border-gray-300 rounded-md"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+              <div className="flex items-center space-x-4">
+                <span>
+                  Page {pagination.page} of {Math.ceil(pagination.page)}
+                </span>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-muted-foreground">Show:</label>
+                  <select
+                    value={pagination.perPage}
+                    onChange={(e) => setPagination(prev => ({ 
+                      ...prev, 
+                      perPage: parseInt(e.target.value),
+                      page: 1 
+                    }))}
+                    className="text-sm border-input rounded-md"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
