@@ -16,12 +16,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-RUN chown -R nextjs:nodejs /app
-
-USER nextjs
+# For development, we'll run as root to avoid permission issues with mounted volumes
+# In production, we use non-root user for security
 
 # Expose port
 EXPOSE 3000
