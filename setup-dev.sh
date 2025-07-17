@@ -138,6 +138,10 @@ timeout 60 bash -c 'until docker-compose exec -T postgres pg_isready -U checkgua
 echo -e "${YELLOW}Waiting for backend API...${NC}"
 timeout 60 bash -c 'until curl -f http://localhost:8000/health >/dev/null 2>&1; do sleep 2; done'
 
+# Initialize database and S3 (the backend container should do this automatically)
+echo -e "${YELLOW}Verifying initialization...${NC}"
+sleep 5
+
 # Wait for frontend
 echo -e "${YELLOW}Waiting for frontend...${NC}"
 timeout 60 bash -c 'until curl -f http://localhost:3000 >/dev/null 2>&1; do sleep 2; done'

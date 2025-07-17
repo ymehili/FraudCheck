@@ -131,6 +131,11 @@ db-migrate: ## Run database migrations
 	@docker-compose -f $(COMPOSE_FILE) exec backend alembic upgrade head
 	@echo "$(GREEN)✓ Database migrations completed$(NC)"
 
+db-init: ## Initialize database and S3 (run this after first setup)
+	@echo "$(YELLOW)Initializing database and S3...$(NC)"
+	@docker-compose -f $(COMPOSE_FILE) exec backend bash init-db.sh
+	@echo "$(GREEN)✓ Database and S3 initialization completed$(NC)"
+
 db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "$(RED)⚠ WARNING: This will destroy all database data!$(NC)"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
@@ -138,9 +143,11 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo "$(YELLOW)Resetting database...$(NC)"; \
 		docker-compose -f $(COMPOSE_FILE) down -v; \
-		docker-compose -f $(COMPOSE_FILE) up -d postgres; \
+		docker-compose -f $(COMPOSE_FILE) up -d postgres redis localstack; \
 		sleep 10; \
-		$(MAKE) db-migrate; \
+		docker-compose -f $(COMPOSE_FILE) up -d backend; \
+		sleep 5; \
+		$(MAKE) db-init; \
 		echo "$(GREEN)✓ Database reset completed$(NC)"; \
 	else \
 		echo "$(YELLOW)Database reset cancelled$(NC)"; \

@@ -74,6 +74,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://checkguard:checkguard@postgres:5432/checkguard
       - AWS_ENDPOINT_URL=http://localstack:4566
       - REDIS_URL=redis://redis:6379/0
+      - INIT_DB=true
     env_file:
       - .env.development
     volumes:

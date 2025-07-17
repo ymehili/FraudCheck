@@ -313,3 +313,4 @@ PROJECT.md
 backend/alembic/versions/
 PRPs
 .env.development
+test.png
