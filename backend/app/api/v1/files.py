@@ -240,3 +240,52 @@ async def download_file(
         )
     
     return {"download_url": download_url, "expires_in": 3600}
+
+
+@router.get("/debug", response_model=FileListResponse)
+async def list_files_debug(
+    page: int = 1,
+    per_page: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug endpoint to list files without authentication."""
+    
+    # Use debug user ID
+    debug_user_id = "debug_user_123"
+    
+    # Get or create debug user
+    result = await db.execute(select(User).where(User.id == debug_user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        user = User(id=debug_user_id, email="debug@test.com")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    
+    # Calculate offset
+    offset = (page - 1) * per_page
+    
+    # Get files with pagination
+    result = await db.execute(
+        select(FileRecord)
+        .where(FileRecord.user_id == debug_user_id)
+        .order_by(FileRecord.upload_timestamp.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+    files = result.scalars().all()
+    
+    # Get total count
+    count_result = await db.execute(
+        select(FileRecord)
+        .where(FileRecord.user_id == debug_user_id)
+    )
+    total = len(count_result.scalars().all())
+    
+    return FileListResponse(
+        files=[FileResponse.model_validate(file) for file in files],
+        total=total,
+        page=page,
+        per_page=per_page
+    )

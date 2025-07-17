@@ -17,7 +17,7 @@ export default function HistoryPage() {
   const [pagination, setPagination] = useState<PaginationParams>({
     page: 1,
     perPage: 20,
-    sortField: 'analysisTimestamp',
+    sortField: 'analysis_timestamp',
     sortDirection: 'desc'
   });
   const [filters, setFilters] = useState<DashboardFilter>({});

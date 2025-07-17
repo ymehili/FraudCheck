@@ -21,6 +21,8 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [fileId, setFileId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Redirect if not authenticated
   if (isLoaded && !userId) {
@@ -74,17 +76,13 @@ export default function UploadPage() {
       }
 
       const result = await response.json();
+      setFileId(result.file_id);
       setSuccess(`File uploaded successfully! File ID: ${result.file_id}`);
-      
-      // Reset after success
-      setTimeout(() => {
-        setSuccess(null);
-        setUploadProgress(0);
-      }, 3000);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
       setUploadProgress(0);
+      setFileId(null);
     } finally {
       setIsUploading(false);
     }
@@ -100,6 +98,49 @@ export default function UploadPage() {
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
+  };
+
+  const startAnalysis = async (fileIdToAnalyze: string) => {
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Authentication token not available');
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analyze/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_id: fileIdToAnalyze }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Analysis failed');
+      }
+
+      const result = await response.json();
+      
+      // Redirect to analysis results page
+      router.push(`/analysis/${result.id}`);
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const resetUpload = () => {
+    setSuccess(null);
+    setError(null);
+    setFileId(null);
+    setUploadProgress(0);
   };
 
   if (!isLoaded) {
@@ -141,24 +182,26 @@ export default function UploadPage() {
         </div>
 
         {/* Upload Method Selection */}
-        <div className="mb-8">
-          <div className="flex space-x-4">
-            <Button
-              onClick={() => setUploadMethod('file')}
-              variant={uploadMethod === 'file' ? 'primary' : 'outline'}
-              size="sm"
-            >
-              Upload File
-            </Button>
-            <Button
-              onClick={() => setUploadMethod('camera')}
-              variant={uploadMethod === 'camera' ? 'primary' : 'outline'}
-              size="sm"
-            >
-              Use Camera
-            </Button>
+        {!fileId && (
+          <div className="mb-8">
+            <div className="flex space-x-4">
+              <Button
+                onClick={() => setUploadMethod('file')}
+                variant={uploadMethod === 'file' ? 'primary' : 'outline'}
+                size="sm"
+              >
+                Upload File
+              </Button>
+              <Button
+                onClick={() => setUploadMethod('camera')}
+                variant={uploadMethod === 'camera' ? 'primary' : 'outline'}
+                size="sm"
+              >
+                Use Camera
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -179,7 +222,39 @@ export default function UploadPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <AlertDescription>
-              {success}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span>{success}</span>
+                  {fileId && (
+                    <Button
+                      onClick={() => startAnalysis(fileId)}
+                      disabled={isAnalyzing}
+                      variant="primary"
+                      size="sm"
+                    >
+                      {isAnalyzing ? 'Analyzing...' : 'Start Analysis'}
+                    </Button>
+                  )}
+                </div>
+                {fileId && (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      onClick={resetUpload}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Upload Another File
+                    </Button>
+                    <Button
+                      onClick={() => router.push('/history')}
+                      variant="outline"
+                      size="sm"
+                    >
+                      View History
+                    </Button>
+                  </div>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -196,23 +271,25 @@ export default function UploadPage() {
         )}
 
         {/* Upload Component */}
-        <Card>
-          <CardContent className="p-6">
-            {uploadMethod === 'file' ? (
-              <FileUpload
-                onFileSelect={handleFileSelect}
-                onError={handleError}
-                acceptedTypes={['image/jpeg', 'image/png', 'application/pdf']}
-                maxFileSize={10 * 1024 * 1024} // 10MB
-              />
-            ) : (
-              <CameraCapture
-                onCapture={handleFileCapture}
-                onError={handleError}
-              />
-            )}
-          </CardContent>
-        </Card>
+        {!fileId && (
+          <Card>
+            <CardContent className="p-6">
+              {uploadMethod === 'file' ? (
+                <FileUpload
+                  onFileSelect={handleFileSelect}
+                  onError={handleError}
+                  acceptedTypes={['image/jpeg', 'image/png', 'application/pdf']}
+                  maxFileSize={10 * 1024 * 1024} // 10MB
+                />
+              ) : (
+                <CameraCapture
+                  onCapture={handleFileCapture}
+                  onError={handleError}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Instructions */}
         <Card className="mt-8 bg-blue-50">

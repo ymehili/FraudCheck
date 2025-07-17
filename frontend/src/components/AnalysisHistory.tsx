@@ -21,10 +21,10 @@ interface AnalysisHistoryProps {
 
 const SORT_FIELDS = {
   filename: 'Filename',
-  analysisTimestamp: 'Analysis Date',
-  overallRiskScore: 'Risk Score',
-  riskLevel: 'Risk Level',
-  fileSize: 'File Size'
+  analysis_timestamp: 'Analysis Date',
+  overall_risk_score: 'Risk Score',
+  risk_level: 'Risk Level',
+  file_size: 'File Size'
 };
 
 export default function AnalysisHistory({
@@ -38,7 +38,7 @@ export default function AnalysisHistory({
   className = ''
 }: AnalysisHistoryProps) {
   const [currentSort, setCurrentSort] = useState({
-    field: 'analysisTimestamp',
+    field: 'analysis_timestamp',
     direction: 'desc' as 'asc' | 'desc'
   });
 
