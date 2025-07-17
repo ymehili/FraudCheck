@@ -457,13 +457,13 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
         
         forensics_result = ForensicsResult(
             edge_score=analysis_record.forensics_score or 0.0,
-            compression_score=analysis_record.compression_artifacts.get('score', 0.0),
-            font_score=analysis_record.font_analysis.get('score', 0.0),
+            compression_score=(analysis_record.compression_artifacts or {}).get('score', 0.0),
+            font_score=(analysis_record.font_analysis or {}).get('score', 0.0),
             overall_score=analysis_record.forensics_score or 0.0,
-            detected_anomalies=analysis_record.edge_inconsistencies.get('anomalies', []),
-            edge_inconsistencies=analysis_record.edge_inconsistencies,
-            compression_artifacts=analysis_record.compression_artifacts,
-            font_analysis=analysis_record.font_analysis
+            detected_anomalies=(analysis_record.edge_inconsistencies or {}).get('anomalies', []),
+            edge_inconsistencies=analysis_record.edge_inconsistencies or {},
+            compression_artifacts=analysis_record.compression_artifacts or {},
+            font_analysis=analysis_record.font_analysis or {}
         )
         
         ocr_result = OCRResult(
@@ -502,7 +502,7 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
             forensics=forensics_result,
             ocr=ocr_result,
             rules=rule_engine_result,
-            overall_risk_score=analysis_record.overall_risk_score,
+            overall_risk_score=analysis_record.overall_risk_score or 0.0,
             confidence=overall_confidence
         )
         

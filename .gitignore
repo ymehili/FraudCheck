@@ -314,3 +314,4 @@ backend/alembic/versions/
 PRPs
 .env.development
 test.png
+backend/.initialized

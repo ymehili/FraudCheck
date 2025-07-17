@@ -182,7 +182,7 @@ test: ## Run all tests
 
 test-backend: ## Run backend tests
 	@echo "$(YELLOW)Running backend tests...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) exec backend pytest --maxfail=5 --disable-warnings --tb=short
+	@docker-compose -f $(COMPOSE_FILE) exec backend pytest --disable-warnings --tb=short --cov-report=html
 	@echo "$(GREEN)✓ Backend tests completed$(NC)"
 
 test-frontend: ## Run frontend tests
