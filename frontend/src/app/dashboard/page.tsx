@@ -97,42 +97,53 @@ export default function DashboardPage() {
     </Card>
   );
 
-  const RiskDistributionChart = ({ distribution }: { distribution: RiskDistribution }) => (
-    <Card>
-      <CardHeader>
-        <CardTitle>Risk Distribution</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {[
-            { level: 'LOW', count: distribution.low, color: 'bg-green-500' },
-            { level: 'MEDIUM', count: distribution.medium, color: 'bg-yellow-500' },
-            { level: 'HIGH', count: distribution.high, color: 'bg-red-500' },
-            { level: 'CRITICAL', count: distribution.critical, color: 'bg-red-600' }
-          ].map((item) => {
-            const percentage = distribution.total > 0 ? (item.count / distribution.total) * 100 : 0;
-            return (
-              <div key={item.level} className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                  <span className="text-sm font-medium text-foreground">{item.level}</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-32 bg-muted rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full ${item.color}`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
+  const RiskDistributionChart = ({ distribution }: { distribution: RiskDistribution | null | undefined }) => {
+    // Provide default values if distribution is null/undefined
+    const safeDistribution = distribution || {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0,
+      total: 0
+    };
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Risk Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[
+              { level: 'LOW', count: safeDistribution.low, color: 'bg-green-500' },
+              { level: 'MEDIUM', count: safeDistribution.medium, color: 'bg-yellow-500' },
+              { level: 'HIGH', count: safeDistribution.high, color: 'bg-red-500' },
+              { level: 'CRITICAL', count: safeDistribution.critical, color: 'bg-red-600' }
+            ].map((item) => {
+              const percentage = safeDistribution.total > 0 ? (item.count / safeDistribution.total) * 100 : 0;
+              return (
+                <div key={item.level} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                    <span className="text-sm font-medium text-foreground">{item.level}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground w-12 text-right">{item.count}</span>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-32 bg-muted rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${item.color}`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm text-muted-foreground w-12 text-right">{item.count}</span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -203,6 +214,24 @@ export default function DashboardPage() {
     );
   }
 
+  // Ensure dashboardData is properly structured with defaults
+  const safeData = {
+    totalAnalyses: dashboardData.totalAnalyses || 0,
+    analysesToday: dashboardData.analysesToday || 0,
+    analysesThisWeek: dashboardData.analysesThisWeek || 0,
+    analysesThisMonth: dashboardData.analysesThisMonth || 0,
+    averageRiskScore: dashboardData.averageRiskScore || 0,
+    averageConfidence: dashboardData.averageConfidence || 0,
+    riskDistribution: dashboardData.riskDistribution || {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0,
+      total: 0
+    },
+    trendData: dashboardData.trendData || []
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -222,7 +251,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Analyses"
-          value={dashboardData.totalAnalyses}
+          value={safeData.totalAnalyses}
           icon={
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -231,7 +260,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Today"
-          value={dashboardData.analysesToday}
+          value={safeData.analysesToday}
           subtitle="analyses completed"
           icon={
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -241,7 +270,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Average Risk Score"
-          value={`${Math.round(dashboardData.averageRiskScore)}%`}
+          value={`${Math.round(safeData.averageRiskScore)}%`}
           subtitle="across all analyses"
           icon={
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +280,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Average Confidence"
-          value={formatPercentage(dashboardData.averageConfidence)}
+          value={formatPercentage(safeData.averageConfidence)}
           subtitle="detection confidence"
           icon={
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,23 +292,23 @@ export default function DashboardPage() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RiskDistributionChart distribution={dashboardData.riskDistribution} />
+        <RiskDistributionChart distribution={safeData.riskDistribution} />
         
         {/* Sample Risk Score Chart */}
-        {dashboardData.averageRiskScore > 0 && (
+        {safeData.averageRiskScore > 0 && (
           <RiskScoreChart 
             riskScore={{
-              overallScore: Math.round(dashboardData.averageRiskScore),
+              overallScore: Math.round(safeData.averageRiskScore),
               categoryScores: {
-                forensics: Math.round(dashboardData.averageRiskScore * 0.8),
-                ocr: Math.round(dashboardData.averageRiskScore * 0.9),
-                rules: Math.round(dashboardData.averageRiskScore * 0.7)
+                forensics: Math.round(safeData.averageRiskScore * 0.8),
+                ocr: Math.round(safeData.averageRiskScore * 0.9),
+                rules: Math.round(safeData.averageRiskScore * 0.7)
               },
               riskFactors: ['Sample risk factor'],
-              confidenceLevel: dashboardData.averageConfidence,
-              recommendation: dashboardData.averageRiskScore >= 80 ? 'CRITICAL' :
-                            dashboardData.averageRiskScore >= 60 ? 'HIGH' :
-                            dashboardData.averageRiskScore >= 30 ? 'MEDIUM' : 'LOW'
+              confidenceLevel: safeData.averageConfidence,
+              recommendation: safeData.averageRiskScore >= 80 ? 'CRITICAL' :
+                            safeData.averageRiskScore >= 60 ? 'HIGH' :
+                            safeData.averageRiskScore >= 30 ? 'MEDIUM' : 'LOW'
             }}
             size="medium"
           />
