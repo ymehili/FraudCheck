@@ -209,6 +209,9 @@ async def calculate_batch_risk_scores(
             started_at=datetime.utcnow()
         )
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 400, 404) without modification
+        raise
     except Exception as e:
         logger.error(f"Batch risk score calculation failed: {str(e)}")
         raise HTTPException(
@@ -283,6 +286,9 @@ async def get_risk_score_history(
             score_changes=[]
         )
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) without modification
+        raise
     except Exception as e:
         logger.error(f"Failed to get risk score history: {str(e)}")
         raise HTTPException(
@@ -307,6 +313,9 @@ async def recalculate_risk_score(
         request = RiskScoreRequest(analysis_id=analysis_id, recalculate=True)
         return await calculate_analysis_risk_score(request, current_user, db)
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) without modification
+        raise
     except Exception as e:
         logger.error(f"Risk score recalculation failed: {str(e)}")
         raise HTTPException(

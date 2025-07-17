@@ -19,6 +19,7 @@ from app.api.v1.scoring import (
     RiskScoreRequest, 
     BatchRiskScoreRequest,
     RiskScoreConfigRequest,
+    RiskScoreResponse,
     _get_user_analysis,
     _get_existing_risk_score,
     _extract_forensics_result,
@@ -30,23 +31,81 @@ from app.api.v1.scoring import (
 )
 
 
+def create_test_user_and_data(db_session):
+    """Helper function to create test user, file, and analysis data."""
+    # Create test user
+    user_id = f"test-user-{uuid.uuid4().hex[:8]}"
+    user = User(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    # Create test file
+    file_record = FileRecord(
+        id=f"test-file-{uuid.uuid4().hex[:8]}",
+        user_id=user_id,
+        filename="test.jpg",
+        s3_key="test.jpg",
+        s3_url="https://test.com/test.jpg",
+        file_size=1024,
+        mime_type="image/jpeg",
+        upload_timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Create test analysis
+    analysis_result = AnalysisResult(
+        id=f"test-analysis-{uuid.uuid4().hex[:8]}",
+        file_id=file_record.id,
+        overall_risk_score=75.0,
+        forensics_score=80.0,
+        edge_inconsistencies={"edge_score": 0.8, "anomalies": ["inconsistent_edges"]},
+        compression_artifacts={"compression_score": 0.7, "artifacts": ["jpeg_compression"]},
+        font_analysis={"font_score": 0.9, "fonts": ["Arial", "Times"]},
+        ocr_confidence=0.85,
+        extracted_fields={"payee": "John Doe", "amount": "$100.00"},
+        rule_violations={"violations": ["font_inconsistency"]},
+        confidence_factors={"overall": 0.8, "forensics": 0.75, "ocr": 0.85},
+        analysis_timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Add to session
+    db_session.add_all([user, file_record, analysis_result])
+    
+    return user, file_record, analysis_result
+
+
+def override_current_user_dependency(user):
+    """Helper to override the current user dependency."""
+    from app.main import app
+    from app.api.deps import get_current_user
+    
+    def override_get_current_user():
+        return user
+    
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+
 @pytest.fixture
 def sample_user():
     """Create a sample user for testing."""
+    user_id = f"test-user-{uuid.uuid4().hex[:8]}"
     return User(
-        id="test-user-123",
-        email="test@example.com",
+        id=user_id,
+        email=f"{user_id}@example.com",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
 
 
 @pytest.fixture
-def sample_file_record():
+def sample_file_record(sample_user):
     """Create a sample file record."""
+    file_id = f"test-file-{uuid.uuid4().hex[:8]}"
     return FileRecord(
-        id="test-file-123",
-        user_id="test-user-123",
+        id=file_id,
+        user_id=sample_user.id,
         filename="test.jpg",
         s3_key="test.jpg",
         s3_url="https://test.com/test.jpg",
@@ -57,11 +116,12 @@ def sample_file_record():
 
 
 @pytest.fixture
-def sample_analysis_result():
+def sample_analysis_result(sample_file_record):
     """Create a sample analysis result."""
+    analysis_id = f"test-analysis-{uuid.uuid4().hex[:8]}"
     return AnalysisResult(
-        id="test-analysis-123",
-        file_id="test-file-123",
+        id=analysis_id,
+        file_id=sample_file_record.id,
         overall_risk_score=75.0,
         forensics_score=80.0,
         edge_inconsistencies={
@@ -143,24 +203,31 @@ async def test_calculate_analysis_risk_score_analysis_not_found(authenticated_cl
 
 
 @pytest.mark.asyncio
-async def test_calculate_analysis_risk_score_with_existing_score(authenticated_client, db_session,
-                                                                sample_user, sample_file_record, 
-                                                                sample_analysis_result):
+async def test_calculate_analysis_risk_score_with_existing_score(authenticated_client, db_session):
     """Test risk score calculation with existing score (no recalculation)."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
     # Mock existing score
-    mock_existing_score = MagicMock()
-    mock_existing_score.analysis_id = sample_analysis_result.id
-    mock_existing_score.overall_score = 80
+    mock_existing_score = RiskScoreResponse(
+        analysis_id=analysis_result.id,
+        overall_score=80,
+        risk_level="HIGH",
+        category_scores={"forensics": 80, "ocr": 85, "rules": 75},
+        risk_factors=["font_inconsistency"],
+        confidence_level=0.85,
+        recommendations=["Review document authenticity"],
+        calculated_at=datetime.now(timezone.utc),
+        calculation_metadata={"method": "weighted_average", "weights": {"forensics": 0.4, "ocr": 0.3, "rules": 0.3}}
+    )
     
     with patch('app.api.v1.scoring._get_existing_risk_score', return_value=mock_existing_score):
         request_data = {
-            "analysis_id": sample_analysis_result.id,
+            "analysis_id": analysis_result.id,
             "recalculate": False
         }
         
@@ -171,25 +238,49 @@ async def test_calculate_analysis_risk_score_with_existing_score(authenticated_c
 
 
 @pytest.mark.asyncio
-async def test_calculate_analysis_risk_score_force_recalculation(authenticated_client, db_session,
-                                                                sample_user, sample_file_record,
-                                                                sample_analysis_result, sample_risk_score_data):
+async def test_calculate_analysis_risk_score_force_recalculation(authenticated_client, db_session):
     """Test risk score calculation with forced recalculation."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
     # Mock existing score but force recalculation
-    mock_existing_score = MagicMock()
-    mock_existing_score.analysis_id = sample_analysis_result.id
+    mock_existing_score = RiskScoreResponse(
+        analysis_id=analysis_result.id,
+        overall_score=70,
+        risk_level="MEDIUM",
+        category_scores={"forensics": 70, "ocr": 80, "rules": 65},
+        risk_factors=["font_inconsistency"],
+        confidence_level=0.80,
+        recommendations=["Review document authenticity"],
+        calculated_at=datetime.now(timezone.utc),
+        calculation_metadata={"method": "weighted_average", "weights": {"forensics": 0.4, "ocr": 0.3, "rules": 0.3}}
+    )
+    
+    sample_risk_score_data = RiskScoreData(
+        overall_score=75,
+        risk_level=RiskLevel.HIGH,
+        category_scores={"forensics": 80, "ocr": 85, "rules": 65},
+        risk_factors=["font_inconsistency", "edge_artifacts"],
+        confidence_level=0.82,
+        recommendation="HIGH",
+        detailed_breakdown={
+            "forensics_analysis": {"edge_score": 0.8, "compression_score": 0.7},
+            "ocr_analysis": {"field_confidence": 0.85, "text_clarity": 0.9},
+            "rule_analysis": {"violations": 2, "passed_checks": 8}
+        },
+        recommendations=["Review document authenticity", "Check for tampering"],
+        timestamp=datetime.now(timezone.utc)
+    )
     
     with patch('app.api.v1.scoring._get_existing_risk_score', return_value=mock_existing_score):
         with patch('app.api.v1.scoring.calculate_risk_score', return_value=sample_risk_score_data):
             with patch('app.api.v1.scoring._store_risk_score'):
                 request_data = {
-                    "analysis_id": sample_analysis_result.id,
+                    "analysis_id": analysis_result.id,
                     "recalculate": True
                 }
                 
@@ -201,20 +292,19 @@ async def test_calculate_analysis_risk_score_force_recalculation(authenticated_c
 
 
 @pytest.mark.asyncio
-async def test_calculate_analysis_risk_score_calculation_error(authenticated_client, db_session,
-                                                              sample_user, sample_file_record,
-                                                              sample_analysis_result):
+async def test_calculate_analysis_risk_score_calculation_error(authenticated_client, db_session):
     """Test risk score calculation with calculation error."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
+    
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
     
     with patch('app.api.v1.scoring._get_existing_risk_score', return_value=None):
         with patch('app.api.v1.scoring.calculate_risk_score', side_effect=Exception("Calculation failed")):
             request_data = {
-                "analysis_id": sample_analysis_result.id,
+                "analysis_id": analysis_result.id,
                 "recalculate": False
             }
             
@@ -239,18 +329,17 @@ async def test_calculate_batch_risk_scores_no_valid_analyses(authenticated_clien
 
 
 @pytest.mark.asyncio
-async def test_calculate_batch_risk_scores_partial_valid_analyses(authenticated_client, db_session,
-                                                                 sample_user, sample_file_record,
-                                                                 sample_analysis_result):
+async def test_calculate_batch_risk_scores_partial_valid_analyses(authenticated_client, db_session):
     """Test batch risk score calculation with some valid analyses."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
     request_data = {
-        "analysis_ids": [sample_analysis_result.id, "non-existent-analysis"],
+        "analysis_ids": [analysis_result.id, "non-existent-analysis"],
         "recalculate": False
     }
     
@@ -266,6 +355,8 @@ async def test_calculate_batch_risk_scores_partial_valid_analyses(authenticated_
 @pytest.mark.asyncio
 async def test_calculate_batch_risk_scores_database_error(authenticated_client, db_session):
     """Test batch risk score calculation with database error."""
+    # Since the batch endpoint catches exceptions for individual analyses and continues,
+    # and logs them as warnings, this will result in 400 (no valid analyses) rather than 500
     with patch('app.api.v1.scoring._get_user_analysis', side_effect=Exception("Database error")):
         request_data = {
             "analysis_ids": ["test-analysis-1"],
@@ -274,8 +365,8 @@ async def test_calculate_batch_risk_scores_database_error(authenticated_client, 
         
         response = authenticated_client.post("/api/v1/scoring/batch", json=request_data)
         
-        assert response.status_code == 500
-        assert "Batch risk score calculation failed" in response.json()["detail"]
+        assert response.status_code == 400
+        assert "No valid analyses found" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -296,7 +387,8 @@ async def test_get_batch_job_status_error(authenticated_client):
     """Test get batch job status with error."""
     job_id = str(uuid.uuid4())
     
-    with patch('app.api.v1.scoring.logger.error', side_effect=Exception("Logging error")):
+    with patch('app.api.v1.scoring.datetime') as mock_datetime:
+        mock_datetime.utcnow.side_effect = Exception("DateTime error")
         response = authenticated_client.get(f"/api/v1/scoring/batch/{job_id}")
         
         assert response.status_code == 500
@@ -313,82 +405,98 @@ async def test_get_risk_score_history_analysis_not_found(authenticated_client):
 
 
 @pytest.mark.asyncio
-async def test_get_risk_score_history_no_score(authenticated_client, db_session,
-                                              sample_user, sample_file_record, sample_analysis_result):
+async def test_get_risk_score_history_no_score(authenticated_client, db_session):
     """Test get risk score history with no existing score."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
     with patch('app.api.v1.scoring._get_existing_risk_score', return_value=None):
-        response = authenticated_client.get(f"/api/v1/scoring/history/{sample_analysis_result.id}")
+        response = authenticated_client.get(f"/api/v1/scoring/history/{analysis_result.id}")
         
         assert response.status_code == 404
         assert "No risk score found" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_get_risk_score_history_with_score(authenticated_client, db_session,
-                                                sample_user, sample_file_record, sample_analysis_result):
+async def test_get_risk_score_history_with_score(authenticated_client, db_session):
     """Test get risk score history with existing score."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
-    # Mock existing score
-    mock_score = MagicMock()
-    mock_score.analysis_id = sample_analysis_result.id
-    mock_score.overall_score = 75
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
+    # Mock existing score with proper response object
+    mock_score = RiskScoreResponse(
+        analysis_id=analysis_result.id,
+        overall_score=75,
+        risk_level="HIGH",
+        category_scores={"forensics": 75, "ocr": 80, "rules": 70},
+        risk_factors=["font_inconsistency"],
+        confidence_level=0.85,
+        recommendations=["Review document authenticity"],
+        calculated_at=datetime.now(timezone.utc),
+        calculation_metadata={"method": "weighted_average", "weights": {"forensics": 0.4, "ocr": 0.3, "rules": 0.3}}
+    )
     
     with patch('app.api.v1.scoring._get_existing_risk_score', return_value=mock_score):
-        response = authenticated_client.get(f"/api/v1/scoring/history/{sample_analysis_result.id}")
+        response = authenticated_client.get(f"/api/v1/scoring/history/{analysis_result.id}")
         
         assert response.status_code == 200
         result = response.json()
-        assert result["analysis_id"] == sample_analysis_result.id
+        assert result["analysis_id"] == analysis_result.id
         assert len(result["score_history"]) == 1
-        assert result["current_score"] == mock_score
+        assert result["current_score"]["analysis_id"] == mock_score.analysis_id
+        assert result["current_score"]["overall_score"] == mock_score.overall_score
 
 
 @pytest.mark.asyncio
-async def test_get_risk_score_history_error(authenticated_client, db_session,
-                                           sample_user, sample_file_record, sample_analysis_result):
+async def test_get_risk_score_history_error(authenticated_client, db_session):
     """Test get risk score history with error."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
     with patch('app.api.v1.scoring._get_existing_risk_score', side_effect=Exception("Database error")):
-        response = authenticated_client.get(f"/api/v1/scoring/history/{sample_analysis_result.id}")
+        response = authenticated_client.get(f"/api/v1/scoring/history/{analysis_result.id}")
         
         assert response.status_code == 500
         assert "Failed to get risk score history" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_recalculate_risk_score_success(authenticated_client, db_session,
-                                             sample_user, sample_file_record, sample_analysis_result):
+async def test_recalculate_risk_score_success(authenticated_client, db_session):
     """Test recalculate risk score success."""
-    # Set up database records
-    db_session.add(sample_user)
-    db_session.add(sample_file_record)
-    db_session.add(sample_analysis_result)
+    # Create test data
+    user, file_record, analysis_result = create_test_user_and_data(db_session)
     await db_session.commit()
     
-    # Mock the calculate_analysis_risk_score function
-    with patch('app.api.v1.scoring.calculate_analysis_risk_score') as mock_calculate:
-        mock_response = MagicMock()
-        mock_response.analysis_id = sample_analysis_result.id
-        mock_response.overall_score = 80
-        mock_calculate.return_value = mock_response
-        
-        response = authenticated_client.post(f"/api/v1/scoring/recalculate/{sample_analysis_result.id}")
+    # Override the dependency to use our test user
+    override_current_user_dependency(user)
+    
+    # Mock the calculate_analysis_risk_score function with proper response
+    mock_response = RiskScoreResponse(
+        analysis_id=analysis_result.id,
+        overall_score=80,
+        risk_level="HIGH",
+        category_scores={"forensics": 80, "ocr": 85, "rules": 75},
+        risk_factors=["font_inconsistency"],
+        confidence_level=0.85,
+        recommendations=["Review document authenticity"],
+        calculated_at=datetime.now(timezone.utc),
+        calculation_metadata={"method": "weighted_average", "weights": {"forensics": 0.4, "ocr": 0.3, "rules": 0.3}}
+    )
+    
+    with patch('app.api.v1.scoring.calculate_analysis_risk_score', return_value=mock_response) as mock_calculate:
+        response = authenticated_client.post(f"/api/v1/scoring/recalculate/{analysis_result.id}")
         
         assert response.status_code == 200
         # Verify that calculate_analysis_risk_score was called with recalculate=True
