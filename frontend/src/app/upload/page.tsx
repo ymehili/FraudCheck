@@ -127,7 +127,7 @@ export default function UploadPage() {
       const result = await response.json();
       
       // Redirect to analysis results page
-      router.push(`/analysis/${result.id}`);
+      router.push(`/analysis/${result.analysis_id}`);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');

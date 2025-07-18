@@ -29,8 +29,6 @@ from ...core.s3 import s3_service
 from ...utils.file_utils import (
     validate_file_for_analysis,
     prepare_file_for_analysis,
-    get_file_info,
-    TempAnalysisFile,
     FileValidationError,
     FileProcessingError
 )
@@ -149,8 +147,8 @@ async def analyze_check(
         )
 
 
-@router.get("/{file_id}", response_model=AnalysisResultResponse)
-async def get_analysis(
+@router.get("/file/{file_id}", response_model=AnalysisResultResponse)
+async def get_analysis_by_file(
     file_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -174,6 +172,41 @@ async def get_analysis(
         raise
     except Exception as e:
         logger.error(f"Failed to get analysis for file {file_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get analysis: {str(e)}"
+        )
+
+
+@router.get("/{analysis_id}", response_model=AnalysisResponse)
+async def get_analysis_by_id(
+    analysis_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get analysis results by analysis ID."""
+    try:
+        # Get analysis results by ID
+        result = await db.execute(
+            select(AnalysisResult)
+            .join(FileRecord)
+            .where(AnalysisResult.id == analysis_id)
+            .where(FileRecord.user_id == current_user.id)
+        )
+        analysis_result = result.scalar_one_or_none()
+        
+        if not analysis_result:
+            raise HTTPException(
+                status_code=404,
+                detail="Analysis not found or access denied"
+            )
+        
+        return await _format_analysis_response(analysis_result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get analysis {analysis_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get analysis: {str(e)}"
@@ -551,7 +584,6 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
 async def analyze_check_debug(
     request: AnalysisRequest,
     db: AsyncSession = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Debug endpoint to analyze a check image without authentication.
