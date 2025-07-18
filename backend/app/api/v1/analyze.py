@@ -5,8 +5,9 @@ import uuid
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from dataclasses import dataclass
+import numpy as np
 
 from ...database import get_db
 from ...models.user import User
@@ -56,6 +57,22 @@ rule_engine = load_rule_engine()
 async def get_ocr_engine() -> OCREngine:
     """Get OCR engine instance."""
     return await create_ocr_engine()
+
+
+def _convert_numpy_types(obj: Any) -> Any:
+    """Convert numpy types to JSON-serializable Python types."""
+    if isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: _convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 
 @router.post("/", response_model=AnalysisResponse)
@@ -410,21 +427,21 @@ async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAn
         ocr_result = analysis_result.ocr_result
         rule_result = analysis_result.rule_result
         
-        # Create analysis record
+        # Create analysis record with numpy type conversion
         analysis_record = AnalysisResult(
             id=str(uuid.uuid4()),
             file_id=file_id,
             analysis_timestamp=datetime.now(timezone.utc),
             
-            # Forensics results
-            forensics_score=forensics_result.overall_score if forensics_result else 0.0,
-            edge_inconsistencies=forensics_result.edge_inconsistencies if forensics_result else {},
-            compression_artifacts=forensics_result.compression_artifacts if forensics_result else {},
-            font_analysis=forensics_result.font_analysis if forensics_result else {},
+            # Forensics results (convert numpy types)
+            forensics_score=_convert_numpy_types(forensics_result.overall_score if forensics_result else 0.0),
+            edge_inconsistencies=_convert_numpy_types(forensics_result.edge_inconsistencies if forensics_result else {}),
+            compression_artifacts=_convert_numpy_types(forensics_result.compression_artifacts if forensics_result else {}),
+            font_analysis=_convert_numpy_types(forensics_result.font_analysis if forensics_result else {}),
             
-            # OCR results
-            ocr_confidence=ocr_result.extraction_confidence if ocr_result else 0.0,
-            extracted_fields={
+            # OCR results (convert numpy types)
+            ocr_confidence=_convert_numpy_types(ocr_result.extraction_confidence if ocr_result else 0.0),
+            extracted_fields=_convert_numpy_types({
                 "payee": ocr_result.payee if ocr_result else None,
                 "amount": ocr_result.amount if ocr_result else None,
                 "date": ocr_result.date if ocr_result else None,
@@ -434,16 +451,16 @@ async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAn
                 "memo": ocr_result.memo if ocr_result else None,
                 "signature_detected": ocr_result.signature_detected if ocr_result else False,
                 "field_confidences": ocr_result.field_confidences if ocr_result else {}
-            },
+            }),
             
-            # Rule engine results
-            overall_risk_score=rule_result.risk_score if rule_result else 0.0,
-            rule_violations={
+            # Rule engine results (convert numpy types)
+            overall_risk_score=_convert_numpy_types(rule_result.risk_score if rule_result else 0.0),
+            rule_violations=_convert_numpy_types({
                 "violations": rule_result.violations if rule_result else [],
                 "passed_rules": rule_result.passed_rules if rule_result else [],
                 "rule_scores": rule_result.rule_scores if rule_result else {}
-            },
-            confidence_factors=rule_result.confidence_factors if rule_result else {}
+            }),
+            confidence_factors=_convert_numpy_types(rule_result.confidence_factors if rule_result else {})
         )
         
         db.add(analysis_record)

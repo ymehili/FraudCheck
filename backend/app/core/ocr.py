@@ -51,7 +51,7 @@ class OCREngine:
             api_key: Google Generative AI API key
         """
         self.api_key = api_key
-        self.model_name = "gemini-2.0-flash-exp"
+        self.model_name = "gemini-2.5-flash"
         self.max_retries = 3
         self.timeout = 30
         
@@ -208,13 +208,28 @@ class OCREngine:
             }
             
             # Configure generation parameters
+            # Create a clean schema without Pydantic-specific fields
+            schema = {
+                "type": "object",
+                "properties": {
+                    "payee": {"type": "string", "description": "The payee name on the check"},
+                    "amount": {"type": "string", "description": "The amount written on the check"},
+                    "date": {"type": "string", "description": "The date on the check"},
+                    "account_number": {"type": "string", "description": "The account number"},
+                    "routing_number": {"type": "string", "description": "The routing number"},
+                    "check_number": {"type": "string", "description": "The check number"},
+                    "memo": {"type": "string", "description": "The memo field content"},
+                    "bank_name": {"type": "string", "description": "The bank name"},
+                    "signature_present": {"type": "boolean", "description": "Whether a signature is present"},
+                    "raw_text": {"type": "string", "description": "Raw extracted text"}
+                },
+                "required": []
+            }
+            
             generation_config = {
                 "temperature": 0.1,  # Low temperature for consistent extraction
-                "top_k": 1,
-                "top_p": 0.8,
-                "max_output_tokens": 2048,
                 "response_mime_type": "application/json",
-                "response_schema": CheckFieldsSchema.model_json_schema()
+                "response_schema": schema
             }
             
             # Generate content
@@ -230,11 +245,6 @@ class OCREngine:
             # Check for safety issues
             if not response.candidates:
                 raise OCRError("No candidates returned from API")
-            
-            candidate = response.candidates[0]
-            if candidate.finish_reason != "STOP":
-                raise OCRError(f"Generation stopped: {candidate.finish_reason}")
-            
             return response
             
         except Exception as e:
