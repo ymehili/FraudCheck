@@ -32,17 +32,95 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def verify_clerk_token(token: str) -> Dict[str, Any]:
+async def get_clerk_jwks() -> Dict[str, Any]:
     """
-    Verify Clerk JWT token and return user data.
+    Fetch Clerk's JSON Web Key Set (JWKS) for JWT verification.
     """
     try:
-        # Decode without verification for development
-        # NOTE: In production, you must properly verify the JWT
-        unverified_payload = jwt.get_unverified_claims(token)
+        # Extract the publishable key to get the instance ID
+        publishable_key = settings.CLERK_PUBLISHABLE_KEY
+        if not publishable_key.startswith("pk_"):
+            raise ValueError("Invalid Clerk publishable key format")
         
-        # Basic validation
-        user_id = unverified_payload.get("sub")
+        # Extract instance identifier from publishable key
+        # Format: pk_test_<base64_instance_info>
+        instance_part = publishable_key.split('_', 2)[-1]
+        
+        # Clerk JWKS URL format
+        jwks_url = f"https://api.clerk.com/v1/jwks"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(jwks_url)
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Failed to fetch Clerk JWKS",
+                )
+            
+            return response.json()
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"JWKS fetch error: {str(e)}",
+        )
+
+
+async def verify_clerk_token(token: str) -> Dict[str, Any]:
+    """
+    Verify Clerk JWT token with proper signature verification and return user data.
+    """
+    try:
+        # Get the token header to extract the key ID
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        
+        if not kid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing key ID (kid) in header",
+            )
+        
+        # Fetch JWKS from Clerk
+        jwks = await get_clerk_jwks()
+        
+        # Find the matching key
+        rsa_key = None
+        for key in jwks.get("keys", []):
+            if key.get("kid") == kid:
+                rsa_key = {
+                    "kty": key.get("kty"),
+                    "kid": key.get("kid"),
+                    "use": key.get("use"),
+                    "n": key.get("n"),
+                    "e": key.get("e"),
+                }
+                break
+        
+        if not rsa_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unable to find matching key in JWKS",
+            )
+        
+        # Verify and decode the token
+        try:
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=["RS256"],
+                audience=settings.CLERK_PUBLISHABLE_KEY,
+                options={"verify_exp": True, "verify_aud": True}
+            )
+        except JWTError as jwt_error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"JWT signature verification failed: {str(jwt_error)}",
+            )
+        
+        # Extract user information from verified payload
+        user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,14 +129,14 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
         
         # Extract email - try multiple field names that Clerk might use
         email = (
-            unverified_payload.get("email") or 
-            unverified_payload.get("email_address") or
-            unverified_payload.get("primary_email_address_id")
+            payload.get("email") or 
+            payload.get("email_address") or
+            payload.get("primary_email_address_id")
         )
         
         # If no email found, try to get it from email_addresses array
         if not email:
-            email_addresses = unverified_payload.get("email_addresses", [])
+            email_addresses = payload.get("email_addresses", [])
             if email_addresses and len(email_addresses) > 0:
                 # Take the first email address
                 if isinstance(email_addresses[0], dict):
@@ -79,11 +157,9 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
         
         return user_data
         
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token validation failed: {str(e)}",
-        )
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
