@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc, and_, or_
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 from ...database import get_db
@@ -147,10 +147,15 @@ async def get_dashboard_stats(
         )
 
 
-@router.get("/history", response_model=AnalysisHistoryResponse)
+@router.get("/history")
 async def get_analysis_history(
-    filters: DashboardFilter = Depends(),
-    pagination: PaginationParams = Depends(),
+    page: int = 1,
+    size: int = 20,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_risk_score: Optional[float] = None,
+    max_risk_score: Optional[float] = None,
+    status: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -158,11 +163,9 @@ async def get_analysis_history(
     Get paginated analysis history with filtering.
     
     Supports filtering by:
-    - Date range
-    - Risk score range
-    - Risk levels
-    - File types
-    - Presence of violations
+    - Date range (start_date, end_date)
+    - Risk score range (min_risk_score, max_risk_score)
+    - Status
     """
     try:
         # Build base query
@@ -173,51 +176,109 @@ async def get_analysis_history(
             .options(joinedload(AnalysisResult.file))
         )
         
-        # Apply filters
-        filtered_query = await _apply_filters(base_query, filters)
+        # Apply simple filters
+        query_conditions = [FileRecord.user_id == current_user.id]
         
-        # Apply sorting
-        sorted_query = await _apply_sorting(filtered_query, pagination)
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                query_conditions.append(AnalysisResult.analysis_timestamp >= start_dt)
+            except ValueError:
+                pass  # Ignore invalid date format
+        
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                query_conditions.append(AnalysisResult.analysis_timestamp <= end_dt)
+            except ValueError:
+                pass  # Ignore invalid date format
+        
+        if min_risk_score is not None:
+            query_conditions.append(AnalysisResult.overall_risk_score >= min_risk_score)
+        
+        if max_risk_score is not None:
+            query_conditions.append(AnalysisResult.overall_risk_score <= max_risk_score)
+        
+        if status and status.lower() != 'all':
+            # For now, all analyses have 'completed' status
+            # This can be extended when status tracking is implemented
+            pass
+        
+        # Build filtered query
+        filtered_query = (
+            select(AnalysisResult)
+            .join(FileRecord)
+            .where(and_(*query_conditions))
+            .options(joinedload(AnalysisResult.file))
+            .order_by(desc(AnalysisResult.analysis_timestamp))
+        )
         
         # Get total count for pagination
-        count_query = select(func.count()).select_from(filtered_query.subquery())
+        count_query = (
+            select(func.count(AnalysisResult.id))
+            .join(FileRecord)
+            .where(and_(*query_conditions))
+        )
         total_count = await db.scalar(count_query)
         
         # Apply pagination
-        offset = (pagination.page - 1) * pagination.per_page
-        paginated_query = sorted_query.offset(offset).limit(pagination.per_page)
+        offset = (page - 1) * size
+        paginated_query = filtered_query.offset(offset).limit(size)
         
         # Execute query
         result = await db.execute(paginated_query)
         analyses = result.scalars().all()
         
-        # Convert to enhanced analysis results
-        enhanced_analyses = []
+        # Convert to simple history items that match frontend expectations
+        history_items = []
         for analysis in analyses:
-            enhanced_analysis = await _convert_to_enhanced_result(analysis)
-            enhanced_analyses.append(enhanced_analysis)
+            violations = analysis.rule_violations.get('violations', []) if analysis.rule_violations else []
+            
+            history_item = {
+                'analysis_id': analysis.id,
+                'file_id': analysis.file_id,
+                'filename': analysis.file.filename,
+                'timestamp': analysis.analysis_timestamp.isoformat(),
+                'created_at': analysis.analysis_timestamp.isoformat(),
+                'overall_risk_score': int(analysis.overall_risk_score),
+                'confidence': analysis.ocr_confidence,
+                'status': 'completed',  # For now, assume all are completed
+                'violations_count': len(violations),
+                'primary_violations': violations[:3],  # First 3 violations
+                'processing_time': None  # TODO: Add processing time tracking
+            }
+            history_items.append(history_item)
         
         # Calculate pagination info
-        total_pages = ((total_count or 0) + pagination.per_page - 1) // pagination.per_page
+        total_pages = ((total_count or 0) + size - 1) // size
         
         pagination_info = {
-            'page': pagination.page,
-            'per_page': pagination.per_page,
-            'total_items': total_count,
-            'total_pages': total_pages,
-            'has_next': pagination.page < total_pages,
-            'has_previous': pagination.page > 1
+            'page': page,
+            'size': size,
+            'total': total_count or 0,
+            'pages': total_pages,
+            'has_next': page < total_pages,
+            'has_previous': page > 1
         }
         
-        # Get summary statistics for filtered results
-        summary = await _get_filtered_summary(db, current_user.id, filters)
+        # Create a simple filters object for response compatibility
+        simple_filters = DashboardFilter()
         
-        return AnalysisHistoryResponse(
-            analyses=enhanced_analyses,
-            pagination=pagination_info,
-            filters_applied=filters,
-            summary=summary
-        )
+        # Get summary statistics for filtered results
+        summary = {
+            'total_filtered': total_count or 0,
+            'average_risk_score': sum(a.overall_risk_score for a in analyses) / len(analyses) if analyses else 0.0,
+            'average_confidence': sum(a.ocr_confidence for a in analyses) / len(analyses) if analyses else 0.0
+        }
+        
+        # Return a paginated response that matches frontend expectations
+        return {
+            'items': history_items,
+            'total': total_count or 0,
+            'page': page,
+            'size': size,
+            'pages': total_pages
+        }
         
     except Exception as e:
         logger.error(f"Failed to get analysis history: {str(e)}")

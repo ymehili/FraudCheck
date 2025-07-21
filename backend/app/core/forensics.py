@@ -2,10 +2,14 @@ import cv2
 import numpy as np
 import os
 import asyncio
+import warnings
 from typing import Dict, List, Any
 from skimage import feature, measure
 from skimage.color import rgb2gray
 import logging
+
+# Suppress numpy warnings for division by zero and invalid values
+warnings.filterwarnings('ignore', category=RuntimeWarning, module='numpy')
 
 from ..schemas.analysis import ForensicsResult
 
@@ -51,6 +55,17 @@ class ForensicsEngine:
             
             # Convert BGR to RGB for consistent processing
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Check image size and resize if too large (optimization for hanging)
+            height, width = image_rgb.shape[:2]
+            max_dimension = 2048  # Limit to 2K resolution for performance
+            
+            if max(height, width) > max_dimension:
+                logger.info(f"Resizing large image from {width}x{height} for performance")
+                scale_factor = max_dimension / max(height, width)
+                new_width = int(width * scale_factor)
+                new_height = int(height * scale_factor)
+                image_rgb = cv2.resize(image_rgb, (new_width, new_height), interpolation=cv2.INTER_AREA)
             
             # Run analysis components in parallel
             tasks = [
@@ -277,21 +292,43 @@ class ForensicsEngine:
         try:
             # Simple correlation-based cloning detection
             h, w = gray.shape
+            
+            # Skip expensive cloning detection for large images to prevent hanging
+            if h * w > 1000000:  # More than 1MP
+                logger.info("Skipping cloning detection for large image to prevent timeout")
+                return {
+                    'score': 0.0,
+                    'high_correlations': 0,
+                    'total_comparisons': 0,
+                    'max_correlation': 0.0,
+                    'regions': [],
+                    'skipped': True
+                }
+            
             block_size = 32
             correlations = []
             
-            # Sample blocks and compare
-            for i in range(0, h - block_size, block_size):
-                for j in range(0, w - block_size, block_size):
+            # Sample blocks and compare (limited for performance)
+            step_size = max(block_size, min(64, block_size * 2))  # Larger steps for performance
+            for i in range(0, h - block_size, step_size):
+                for j in range(0, w - block_size, step_size):
                     block = gray[i:i+block_size, j:j+block_size]
                     
-                    # Compare with other blocks
-                    for ii in range(i + block_size, h - block_size, block_size):
-                        for jj in range(0, w - block_size, block_size):
+                    # Compare with other blocks (limited for performance)
+                    comparison_count = 0
+                    max_comparisons_per_block = 10  # Limit comparisons per block
+                    
+                    for ii in range(i + block_size, h - block_size, step_size):
+                        for jj in range(0, w - block_size, step_size):
+                            if comparison_count >= max_comparisons_per_block:
+                                break
                             other_block = gray[ii:ii+block_size, jj:jj+block_size]
                             correlation = np.corrcoef(block.flat, other_block.flat)[0, 1]
                             if not np.isnan(correlation):
                                 correlations.append(correlation)
+                            comparison_count += 1
+                        if comparison_count >= max_comparisons_per_block:
+                            break
             
             # High correlation might indicate cloning
             high_correlations = [c for c in correlations if c > 0.95]

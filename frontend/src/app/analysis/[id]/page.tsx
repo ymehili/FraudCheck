@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AnalysisResponse } from '@/types/api';
-import { formatDate, getRiskLevel, formatCurrency, cn } from '@/lib/utils';
+import { formatDate, getRiskLevel, formatCurrency, cn, formatRiskScore, formatConfidence, formatScore } from '@/lib/utils';
 import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
 import Link from 'next/link';
 
@@ -139,7 +139,7 @@ export default function AnalysisResultPage() {
                 <Skeleton className="h-6 w-40 mt-1" />
               ) : analysis ? (
                 <p className="text-lg text-gray-600">
-                  Analysis ID: #{analysisId.slice(-8)} • {formatDate(analysis.created_at)}
+                  Analysis ID: #{analysisId.slice(-8)} • {formatDate(analysis.timestamp)}
                 </p>
               ) : null}
             </div>
@@ -214,41 +214,38 @@ export default function AnalysisResultPage() {
                 <CardContent>
                   <div className={cn(
                     "rounded-lg p-6 border-2",
-                    analysis.risk_score >= RISK_THRESHOLDS.HIGH ? "border-red-200 bg-red-50" :
-                    analysis.risk_score >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-200 bg-yellow-50" :
+                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "border-red-200 bg-red-50" :
+                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-200 bg-yellow-50" :
                     "border-green-200 bg-green-50"
                   )}>
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">
-                          Risk Level: {getRiskLevel(analysis.risk_score)}
+                          Risk Level: {getRiskLevel(analysis.overall_risk_score * 100)}
                         </h3>
                         <p className="text-sm text-gray-600">
                           Based on comprehensive fraud detection analysis
                         </p>
                       </div>
-                      <div className={cn("text-4xl font-bold", getRiskColor(analysis.risk_score))}>
-                        {analysis.risk_score}/100
+                      <div className={cn("text-4xl font-bold", getRiskColor(analysis.overall_risk_score * 100))}>
+                        {formatRiskScore(analysis.overall_risk_score)}
                       </div>
                     </div>
                     <Progress 
-                      value={analysis.risk_score} 
+                      value={analysis.overall_risk_score * 100} 
                       className="h-3"
                     />
                   </div>
 
                   {/* Key Findings */}
-                  {analysis.rule_engine_result?.triggered_rules && analysis.rule_engine_result.triggered_rules.length > 0 && (
+                  {analysis.rules?.violations && analysis.rules.violations.length > 0 && (
                     <div className="mt-6">
                       <h4 className="font-medium text-gray-900 mb-3">Key Findings:</h4>
                       <div className="space-y-2">
-                        {analysis.rule_engine_result.triggered_rules.slice(0, 3).map((rule, index) => (
+                        {analysis.rules.violations.slice(0, 3).map((violation, index) => (
                           <div key={index} className="flex items-center space-x-2 text-sm">
                             <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                            <span>{rule.description}</span>
-                            <Badge variant="secondary">
-                              Weight: {rule.weight}
-                            </Badge>
+                            <span>{violation}</span>
                           </div>
                         ))}
                       </div>
@@ -258,7 +255,7 @@ export default function AnalysisResultPage() {
               </Card>
 
               {/* Forensic Analysis */}
-              {analysis.forensics_result && (
+              {analysis.forensics && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
@@ -272,60 +269,59 @@ export default function AnalysisResultPage() {
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Image Quality</h4>
+                        <h4 className="font-medium text-gray-900 mb-2">Forensics Scores</h4>
                         <div className="space-y-1 text-sm">
                           <div className="flex justify-between">
-                            <span>Resolution:</span>
-                            <span>{analysis.forensics_result.image_quality?.resolution || 'N/A'}</span>
+                            <span>Edge Score:</span>
+                            <span>{analysis.forensics.edge_score ? formatScore(analysis.forensics.edge_score) : 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span>Compression:</span>
-                            <span>{analysis.forensics_result.image_quality?.compression_ratio || 'N/A'}</span>
+                            <span>Compression Score:</span>
+                            <span>{analysis.forensics.compression_score ? formatScore(analysis.forensics.compression_score) : 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span>Clarity Score:</span>
-                            <span>{analysis.forensics_result.image_quality?.clarity_score || 'N/A'}</span>
+                            <span>Font Score:</span>
+                            <span>{analysis.forensics.font_score ? formatScore(analysis.forensics.font_score) : 'N/A'}</span>
                           </div>
                         </div>
                       </div>
 
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Anomaly Detection</h4>
+                        <h4 className="font-medium text-gray-900 mb-2">Detected Anomalies</h4>
                         <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span>Edge Inconsistencies:</span>
-                            <span>{analysis.forensics_result.anomalies?.edge_inconsistencies ? '⚠️' : '✅'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Font Mismatches:</span>
-                            <span>{analysis.forensics_result.anomalies?.font_inconsistencies ? '⚠️' : '✅'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Ink Variations:</span>
-                            <span>{analysis.forensics_result.anomalies?.ink_analysis ? '⚠️' : '✅'}</span>
-                          </div>
+                          {analysis.forensics.detected_anomalies.length > 0 ? (
+                            analysis.forensics.detected_anomalies.map((anomaly, index) => (
+                              <div key={index} className="flex items-center space-x-2">
+                                <span className="text-red-500">⚠️</span>
+                                <span>{anomaly}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-green-500">✅</span>
+                              <span>No anomalies detected</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {analysis.forensics_result.confidence_score && (
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Confidence Score</h4>
-                        <Progress 
-                          value={analysis.forensics_result.confidence_score * 100} 
-                          className="h-2"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          {(analysis.forensics_result.confidence_score * 100).toFixed(1)}% confidence in forensic analysis
-                        </p>
-                      </div>
-                    )}
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Overall Forensics Score</h4>
+                      <Progress 
+                        value={analysis.forensics.overall_score * 100} 
+                        className="h-2"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatRiskScore(analysis.forensics.overall_score)}
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               )}
 
               {/* OCR Results */}
-              {analysis.ocr_result && (
+              {analysis.ocr && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
@@ -344,7 +340,7 @@ export default function AnalysisResultPage() {
                             <User className="h-4 w-4 mr-1" />
                             Payee
                           </label>
-                          <p className="text-gray-900">{analysis.ocr_result.payee || 'Not detected'}</p>
+                          <p className="text-gray-900">{analysis.ocr.payee || 'Not detected'}</p>
                         </div>
 
                         <div>
@@ -353,7 +349,7 @@ export default function AnalysisResultPage() {
                             Amount
                           </label>
                           <p className="text-gray-900">
-                            {analysis.ocr_result.amount ? formatCurrency(analysis.ocr_result.amount) : 'Not detected'}
+                            {analysis.ocr.amount || 'Not detected'}
                           </p>
                         </div>
 
@@ -362,7 +358,7 @@ export default function AnalysisResultPage() {
                             <Calendar className="h-4 w-4 mr-1" />
                             Date
                           </label>
-                          <p className="text-gray-900">{analysis.ocr_result.date || 'Not detected'}</p>
+                          <p className="text-gray-900">{analysis.ocr.date || 'Not detected'}</p>
                         </div>
                       </div>
 
@@ -372,7 +368,7 @@ export default function AnalysisResultPage() {
                             <Hash className="h-4 w-4 mr-1" />
                             Check Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr_result.check_number || 'Not detected'}</p>
+                          <p className="text-gray-900 font-mono">{analysis.ocr.check_number || 'Not detected'}</p>
                         </div>
 
                         <div>
@@ -380,7 +376,7 @@ export default function AnalysisResultPage() {
                             <Hash className="h-4 w-4 mr-1" />
                             Account Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr_result.account_number || 'Not detected'}</p>
+                          <p className="text-gray-900 font-mono">{analysis.ocr.account_number || 'Not detected'}</p>
                         </div>
 
                         <div>
@@ -388,22 +384,22 @@ export default function AnalysisResultPage() {
                             <Hash className="h-4 w-4 mr-1" />
                             Routing Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr_result.routing_number || 'Not detected'}</p>
+                          <p className="text-gray-900 font-mono">{analysis.ocr.routing_number || 'Not detected'}</p>
                         </div>
                       </div>
                     </div>
 
-                    {analysis.ocr_result.confidence_scores && (
+                    {analysis.ocr.field_confidences && (
                       <div className="mt-6">
-                        <h4 className="font-medium text-gray-900 mb-3">OCR Confidence Scores</h4>
+                        <h4 className="font-medium text-gray-900 mb-3">OCR Field Confidence</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {Object.entries(analysis.ocr_result.confidence_scores).map(([field, score]) => (
+                          {Object.entries(analysis.ocr.field_confidences).map(([field, score]) => (
                             <div key={field} className="text-center">
                               <div className="text-sm font-medium text-gray-500 capitalize">
                                 {field.replace('_', ' ')}
                               </div>
                               <div className="text-lg font-bold">
-                                {(score * 100).toFixed(0)}%
+                                {formatConfidence(score)}
                               </div>
                             </div>
                           ))}
@@ -415,7 +411,7 @@ export default function AnalysisResultPage() {
               )}
 
               {/* Rule Engine Details */}
-              {analysis.rule_engine_result && (
+              {analysis.rules && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
@@ -427,17 +423,15 @@ export default function AnalysisResultPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {analysis.rule_engine_result.triggered_rules && analysis.rule_engine_result.triggered_rules.length > 0 ? (
+                    {analysis.rules.violations && analysis.rules.violations.length > 0 ? (
                       <div className="space-y-4">
-                        <h4 className="font-medium text-red-600">Triggered Rules ({analysis.rule_engine_result.triggered_rules.length})</h4>
-                        {analysis.rule_engine_result.triggered_rules.map((rule, index) => (
+                        <h4 className="font-medium text-red-600">Rule Violations ({analysis.rules.violations.length})</h4>
+                        {analysis.rules.violations.map((violation, index) => (
                           <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
-                                <h5 className="font-medium text-gray-900">{rule.rule_name}</h5>
-                                <p className="text-sm text-gray-600 mt-1">{rule.description}</p>
+                                <p className="text-sm text-gray-600">{violation}</p>
                               </div>
-                              <Badge variant="destructive">Weight: {rule.weight}</Badge>
                             </div>
                           </div>
                         ))}
@@ -445,29 +439,29 @@ export default function AnalysisResultPage() {
                     ) : (
                       <div className="text-center py-8">
                         <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                        <p className="text-lg font-medium text-gray-900">No Fraud Rules Triggered</p>
+                        <p className="text-lg font-medium text-gray-900">No Rule Violations</p>
                         <p className="text-gray-500">All fraud detection checks passed successfully</p>
                       </div>
                     )}
 
-                    {analysis.rule_engine_result.total_rules_checked && (
+                    {(analysis.rules.violations || analysis.rules.passed_rules) && (
                       <div className="mt-6 pt-4 border-t border-gray-200">
                         <div className="grid grid-cols-3 gap-4 text-center">
                           <div>
                             <div className="text-2xl font-bold text-gray-900">
-                              {analysis.rule_engine_result.total_rules_checked}
+                              {(analysis.rules.violations?.length || 0) + (analysis.rules.passed_rules?.length || 0)}
                             </div>
                             <div className="text-sm text-gray-500">Total Rules</div>
                           </div>
                           <div>
                             <div className="text-2xl font-bold text-red-600">
-                              {analysis.rule_engine_result.triggered_rules?.length || 0}
+                              {analysis.rules.violations?.length || 0}
                             </div>
-                            <div className="text-sm text-gray-500">Triggered</div>
+                            <div className="text-sm text-gray-500">Violations</div>
                           </div>
                           <div>
                             <div className="text-2xl font-bold text-green-600">
-                              {analysis.rule_engine_result.total_rules_checked - (analysis.rule_engine_result.triggered_rules?.length || 0)}
+                              {analysis.rules.passed_rules?.length || 0}
                             </div>
                             <div className="text-sm text-gray-500">Passed</div>
                           </div>
@@ -492,21 +486,21 @@ export default function AnalysisResultPage() {
                 <CardContent className="text-center">
                   <div className={cn(
                     "w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl font-bold border-4",
-                    analysis.risk_score >= RISK_THRESHOLDS.HIGH ? "border-red-500 bg-red-50 text-red-600" :
-                    analysis.risk_score >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-500 bg-yellow-50 text-yellow-600" :
+                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "border-red-500 bg-red-50 text-red-600" :
+                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-500 bg-yellow-50 text-yellow-600" :
                     "border-green-500 bg-green-50 text-green-600"
                   )}>
-                    {analysis.risk_score}
+                    {formatRiskScore(analysis.overall_risk_score)}
                   </div>
                   <Badge 
                     variant={
-                      analysis.risk_score >= RISK_THRESHOLDS.HIGH ? "destructive" :
-                      analysis.risk_score >= RISK_THRESHOLDS.MEDIUM ? "default" :
+                      (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "destructive" :
+                      (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "default" :
                       "secondary"
                     }
                     className="mb-2"
                   >
-                    {getRiskLevel(analysis.risk_score)}
+                    {getRiskLevel(analysis.overall_risk_score * 100)}
                   </Badge>
                   <p className="text-sm text-gray-600">
                     Out of 100 possible points
@@ -523,7 +517,7 @@ export default function AnalysisResultPage() {
                   <div className="flex items-center text-sm">
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
                     <span className="text-gray-600">Created:</span>
-                    <span className="ml-auto">{formatDate(analysis.created_at)}</span>
+                    <span className="ml-auto">{formatDate(analysis.timestamp)}</span>
                   </div>
                   
                   <div className="flex items-center text-sm">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Calendar, Filter, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,15 +68,22 @@ export function FilterControls({
     ...externalFilters,
   });
   const [isExpanded, setIsExpanded] = useState(false);
+  const isInitialMount = useRef(true);
 
   // Debounced filter changes
   useEffect(() => {
+    // Skip the initial mount to prevent triggering on component creation
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
     const timeoutId = setTimeout(() => {
       onFiltersChange(filters);
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [filters, onFiltersChange]);
+  }, [filters]);
 
   const updateFilter = useCallback((key: string, value: any) => {
     setFilters((prev: any) => ({ ...prev, [key]: value }));

@@ -550,9 +550,57 @@ class RuleEngine:
         
         for evaluation in rule_evaluations:
             if not evaluation.passed:
-                violations.append(f"{evaluation.rule_name}: {evaluation.details}")
+                # Format violation message based on rule type and details
+                violation_msg = self._format_violation_message(evaluation.rule_name, evaluation.details)
+                violations.append(violation_msg)
         
         return violations
+    
+    def _format_violation_message(self, rule_name: str, details: Dict[str, Any]) -> str:
+        """Format a user-friendly violation message from rule details."""
+        
+        # Handle specific rule types with custom formatting
+        if 'field' in details and 'value' in details and 'threshold' in details:
+            # Threshold-based rule
+            field = details['field']
+            value = details['value']
+            threshold = details['threshold']
+            operator = details.get('operator', '')
+            
+            if field == 'edge_score':
+                return f"Poor edge quality detected (score: {value:.3f}, threshold: {threshold})"
+            elif field == 'compression_score':
+                return f"High compression artifacts detected (score: {value:.3f}, threshold: {threshold})"
+            elif field == 'font_score':
+                return f"Font inconsistencies detected (score: {value:.3f}, threshold: {threshold})"
+            elif field == 'overall_score':
+                return f"Overall forensics score below threshold ({value:.3f} < {threshold})"
+            else:
+                return f"{rule_name}: {field} {operator} {threshold} (value: {value})"
+        
+        elif 'violations' in details and isinstance(details['violations'], list):
+            # Validation rules with specific violations
+            violations_list = details['violations']
+            if len(violations_list) == 1:
+                return f"{rule_name}: {violations_list[0]}"
+            else:
+                return f"{rule_name}: {', '.join(violations_list)}"
+        
+        elif 'missing_fields' in details:
+            # Missing fields rule
+            missing = details['missing_fields']
+            if len(missing) == 1:
+                return f"Missing required field: {missing[0]}"
+            else:
+                return f"Missing required fields: {', '.join(missing)}"
+        
+        elif 'error' in details:
+            # Error case
+            return f"{rule_name}: {details['error']}"
+        
+        else:
+            # Fallback to rule name
+            return f"{rule_name}: Rule violation detected"
     
     def _extract_passed_rules(self, rule_evaluations: List[RuleEvaluationResult]) -> List[str]:
         """Extract passed rules from evaluations."""

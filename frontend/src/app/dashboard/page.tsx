@@ -21,14 +21,17 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { DashboardStats } from '@/types/api';
-import { formatNumber, formatPercentage, cn } from '@/lib/utils';
+import { formatNumber, formatPercentage, cn, formatRiskScore } from '@/lib/utils';
 import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
 import Link from 'next/link';
 
 interface DashboardFilters {
   start_date?: string;
   end_date?: string;
-  risk_threshold?: number;
+  min_risk_score?: number;
+  max_risk_score?: number;
+  status?: string;
+  search?: string;
 }
 
 export default function DashboardPage() {
@@ -62,9 +65,31 @@ export default function DashboardPage() {
     fetchDashboardStats(filters);
   }, []);
 
-  const handleFiltersChange = (newFilters: DashboardFilters) => {
-    setFilters(newFilters);
-    fetchDashboardStats(newFilters);
+  const handleFiltersChange = (newFilters: any) => {
+    // Convert filter format from FilterControls to API format
+    const apiFilters: DashboardFilters = {};
+    
+    if (newFilters.dateRange?.start) {
+      apiFilters.start_date = newFilters.dateRange.start;
+    }
+    if (newFilters.dateRange?.end) {
+      apiFilters.end_date = newFilters.dateRange.end;
+    }
+    if (newFilters.riskScore?.min !== undefined && newFilters.riskScore.min > 0) {
+      apiFilters.min_risk_score = newFilters.riskScore.min;
+    }
+    if (newFilters.riskScore?.max !== undefined && newFilters.riskScore.max < 100) {
+      apiFilters.max_risk_score = newFilters.riskScore.max;
+    }
+    if (newFilters.status && newFilters.status !== 'all') {
+      apiFilters.status = newFilters.status;
+    }
+    if (newFilters.search) {
+      apiFilters.search = newFilters.search;
+    }
+    
+    setFilters(apiFilters);
+    fetchDashboardStats(apiFilters);
   };
 
   const handleRefresh = () => {
@@ -208,10 +233,10 @@ export default function DashboardPage() {
               ) : (
                 <div>
                   <div className="text-2xl font-bold">
-                    {(stats?.average_risk_score || 0).toFixed(1)}
+                    {formatRiskScore(stats?.average_risk_score || 0)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Out of 100 scale
+                    Average risk score
                   </p>
                 </div>
               )}
@@ -297,8 +322,8 @@ export default function DashboardPage() {
                     <div key={analysis.analysis_id} className="flex items-center space-x-3">
                       <div className={cn(
                         "w-2 h-2 rounded-full",
-                        analysis.risk_score >= RISK_THRESHOLDS.HIGH ? "bg-red-500" :
-                        analysis.risk_score >= RISK_THRESHOLDS.MEDIUM ? "bg-yellow-500" :
+                        (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "bg-red-500" :
+                        (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "bg-yellow-500" :
                         "bg-green-500"
                       )} />
                       <div className="flex-1 min-w-0">
@@ -306,7 +331,7 @@ export default function DashboardPage() {
                           Analysis #{analysis.analysis_id.slice(-8)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Risk Score: {analysis.risk_score} • {new Date(analysis.created_at).toLocaleDateString()}
+                          Risk Score: {formatRiskScore(analysis.overall_risk_score)} • {new Date(analysis.created_at).toLocaleDateString()}
                         </p>
                       </div>
                       <Link href={`${ROUTES.ANALYSIS}/${analysis.analysis_id}`}>

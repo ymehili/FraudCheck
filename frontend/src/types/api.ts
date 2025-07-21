@@ -17,13 +17,11 @@ export interface FileUploadResponse {
 export interface AnalysisResponse {
   analysis_id: string;
   file_id: string;
-  created_at: string;
   timestamp: string;
   processing_time?: number;
-  forensics_result?: ForensicsResult;
-  ocr_result?: OCRResult;
-  rule_engine_result?: RuleEngineResult;
-  risk_score: number;
+  forensics?: ForensicsResult;
+  ocr?: OCRResult;
+  rules?: RuleEngineResult;
   overall_risk_score: number;
   confidence: number;
 }
@@ -37,22 +35,11 @@ export interface ForensicsResult {
   edge_inconsistencies: Record<string, any>;
   compression_artifacts: Record<string, any>;
   font_analysis: Record<string, any>;
-  confidence_score?: number;
-  image_quality?: {
-    resolution?: string;
-    compression_ratio?: string;
-    clarity_score?: string;
-  };
-  anomalies?: {
-    edge_inconsistencies?: boolean;
-    font_inconsistencies?: boolean;
-    ink_analysis?: boolean;
-  };
 }
 
 export interface OCRResult {
   payee?: string;
-  amount?: number;
+  amount?: string;
   date?: string;
   account_number?: string;
   routing_number?: string;
@@ -61,8 +48,7 @@ export interface OCRResult {
   signature_detected: boolean;
   extraction_confidence: number;
   raw_text?: string;
-  field_confidences?: Record<string, number>;
-  confidence_scores?: Record<string, number>;
+  field_confidences: Record<string, number>;
 }
 
 export interface RuleEngineResult {
@@ -73,12 +59,6 @@ export interface RuleEngineResult {
   confidence_factors: Record<string, number>;
   recommendations: string[];
   overall_confidence?: number;
-  triggered_rules?: Array<{
-    rule_name: string;
-    description: string;
-    weight: number;
-  }>;
-  total_rules_checked?: number;
 }
 
 export interface DashboardStats {
@@ -151,7 +131,6 @@ export interface AnalysisHistoryItem {
   timestamp: string;
   created_at: string;
   overall_risk_score: number;
-  risk_score: number;
   confidence: number;
   status: 'completed' | 'processing' | 'failed';
   violations_count: number;

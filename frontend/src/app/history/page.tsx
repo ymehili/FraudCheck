@@ -252,7 +252,7 @@ export default function HistoryPage() {
                 {isLoading ? (
                   <Skeleton className="h-8 w-16" />
                 ) : (
-                  analyses.filter(a => a.risk_score >= RISK_THRESHOLDS.HIGH).length
+                  (analyses || []).filter(a => a.overall_risk_score >= RISK_THRESHOLDS.HIGH).length
                 )}
               </div>
             </CardContent>
@@ -266,8 +266,8 @@ export default function HistoryPage() {
               <div className="text-2xl font-bold">
                 {isLoading ? (
                   <Skeleton className="h-8 w-16" />
-                ) : analyses.length > 0 ? (
-                  (analyses.reduce((sum, a) => sum + a.risk_score, 0) / analyses.length).toFixed(1)
+                ) : (analyses || []).length > 0 ? (
+                  ((analyses || []).reduce((sum, a) => sum + a.overall_risk_score, 0) / (analyses || []).length).toFixed(1)
                 ) : (
                   '0.0'
                 )}
@@ -315,8 +315,8 @@ export default function HistoryPage() {
                         <TableCell><Skeleton className="h-8 w-16" /></TableCell>
                       </TableRow>
                     ))
-                  ) : analyses.length > 0 ? (
-                    analyses.map((analysis) => (
+                  ) : (analyses || []).length > 0 ? (
+                    (analyses || []).map((analysis) => (
                       <TableRow key={analysis.analysis_id}>
                         <TableCell className="font-medium">
                           {formatDate(analysis.created_at)}
@@ -325,11 +325,11 @@ export default function HistoryPage() {
                           #{analysis.analysis_id.slice(-8)}
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{analysis.risk_score}</span>
+                          <span className="font-medium">{analysis.overall_risk_score}</span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={getRiskBadgeVariant(analysis.risk_score)}>
-                            {getRiskLevel(analysis.risk_score)}
+                          <Badge variant={getRiskBadgeVariant(analysis.overall_risk_score)}>
+                            {getRiskLevel(analysis.overall_risk_score)}
                           </Badge>
                         </TableCell>
                         <TableCell>

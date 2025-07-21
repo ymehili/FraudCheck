@@ -105,11 +105,18 @@ async def analyze_check(
             # Validate and preprocess file (handles both images and PDFs)
             prepared_file_path = await _validate_and_preprocess_file(temp_file_path, request.page_number or 1)
             
-            # Run analysis components
-            analysis_result = await _run_comprehensive_analysis(
-                prepared_file_path, 
-                request.analysis_types
-            )
+            # Run analysis components with timeout
+            try:
+                analysis_result = await asyncio.wait_for(
+                    _run_comprehensive_analysis(prepared_file_path, request.analysis_types),
+                    timeout=120.0  # 2 minutes timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Analysis timeout for file {request.file_id} after 120 seconds")
+                raise HTTPException(
+                    status_code=408,
+                    detail="Analysis timeout - file may be too complex or large for processing"
+                )
             
             # Store analysis results in database
             analysis_record = await _store_analysis_results(

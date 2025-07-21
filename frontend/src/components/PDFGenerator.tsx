@@ -89,19 +89,19 @@ export function PDFGenerator({
       currentY += 10;
 
       pdf.setFontSize(12);
-      const riskLevel = getRiskLevel(analysis.risk_score);
-      const riskColor = analysis.risk_score >= 75 ? [220, 38, 38] as [number, number, number] : 
-                       analysis.risk_score >= 50 ? [245, 158, 11] as [number, number, number] : [34, 197, 94] as [number, number, number];
+      const riskLevel = getRiskLevel(analysis.overall_risk_score);
+      const riskColor = analysis.overall_risk_score >= 75 ? [220, 38, 38] as [number, number, number] : 
+                       analysis.overall_risk_score >= 50 ? [245, 158, 11] as [number, number, number] : [34, 197, 94] as [number, number, number];
       
       pdf.setTextColor(...riskColor);
       currentY = addText(`Risk Level: ${riskLevel.toUpperCase()}`, margin + 10, currentY);
       
       pdf.setTextColor(40, 40, 40);
-      currentY = addText(`Risk Score: ${analysis.risk_score}/100`, pageWidth - margin - 80, currentY - 6);
+      currentY = addText(`Risk Score: ${analysis.overall_risk_score}/100`, pageWidth - margin - 80, currentY - 6);
       currentY += 10;
 
       pdf.setTextColor(100, 100, 100);
-      const summaryText = `Analysis completed on ${formatDate(analysis.created_at)}${analysis.processing_time ? ` in ${analysis.processing_time.toFixed(1)} seconds` : ''}`;
+      const summaryText = `Analysis completed on ${formatDate(analysis.timestamp)}${analysis.processing_time ? ` in ${analysis.processing_time.toFixed(1)} seconds` : ''}`;
       currentY = addText(summaryText, margin + 10, currentY);
       currentY += 25;
 
@@ -116,10 +116,10 @@ export function PDFGenerator({
       const analysisInfo = [
         ['Analysis ID', `#${analysis.analysis_id}`],
         ['File ID', `#${analysis.file_id}`],
-        ['Created Date', formatDate(analysis.created_at)],
+        ['Created Date', formatDate(analysis.timestamp)],
         ['Processing Time', analysis.processing_time ? `${analysis.processing_time.toFixed(1)} seconds` : 'N/A'],
-        ['Risk Score', `${analysis.risk_score}/100`],
-        ['Risk Level', getRiskLevel(analysis.risk_score).toUpperCase()],
+        ['Risk Score', `${analysis.overall_risk_score}/100`],
+        ['Risk Level', getRiskLevel(analysis.overall_risk_score).toUpperCase()],
       ];
 
       analysisInfo.forEach(([label, value]) => {
@@ -132,19 +132,19 @@ export function PDFGenerator({
       currentY += 10;
 
       // OCR Results Section
-      if (analysis.ocr_result) {
+      if (analysis.ocr) {
         pdf.setFontSize(16);
         pdf.setTextColor(40, 40, 40);
         currentY = addText('Extracted Information (OCR)', margin, currentY);
         currentY += 10;
 
         const ocrInfo = [
-          ['Payee', analysis.ocr_result.payee || 'Not detected'],
-          ['Amount', analysis.ocr_result.amount ? formatCurrency(analysis.ocr_result.amount) : 'Not detected'],
-          ['Date', analysis.ocr_result.date || 'Not detected'],
-          ['Check Number', analysis.ocr_result.check_number || 'Not detected'],
-          ['Account Number', analysis.ocr_result.account_number || 'Not detected'],
-          ['Routing Number', analysis.ocr_result.routing_number || 'Not detected'],
+          ['Payee', analysis.ocr.payee || 'Not detected'],
+          ['Amount', analysis.ocr.amount || 'Not detected'],
+          ['Date', analysis.ocr.date || 'Not detected'],
+          ['Check Number', analysis.ocr.check_number || 'Not detected'],
+          ['Account Number', analysis.ocr.account_number || 'Not detected'],
+          ['Routing Number', analysis.ocr.routing_number || 'Not detected'],
         ];
 
         pdf.setFontSize(10);
@@ -159,7 +159,7 @@ export function PDFGenerator({
       }
 
       // Forensic Analysis Section
-      if (analysis.forensics_result) {
+      if (analysis.forensics) {
         pdf.setFontSize(16);
         pdf.setTextColor(40, 40, 40);
         currentY = addText('Forensic Analysis', margin, currentY);
@@ -167,60 +167,53 @@ export function PDFGenerator({
 
         pdf.setFontSize(10);
         
-        // Image Quality
-        if (analysis.forensics_result.image_quality) {
-          pdf.setTextColor(100, 100, 100);
-          currentY = addText('Image Quality Assessment:', margin, currentY);
-          currentY += 8;
+        // Forensics Scores
+        pdf.setTextColor(100, 100, 100);
+        currentY = addText('Forensics Scores:', margin, currentY);
+        currentY += 8;
 
-          const qualityInfo = [
-            ['Resolution', analysis.forensics_result.image_quality.resolution || 'N/A'],
-            ['Compression Ratio', analysis.forensics_result.image_quality.compression_ratio || 'N/A'],
-            ['Clarity Score', analysis.forensics_result.image_quality.clarity_score || 'N/A'],
-          ];
+        const forensicsInfo = [
+          ['Edge Score', analysis.forensics.edge_score?.toFixed(2) || 'N/A'],
+          ['Compression Score', analysis.forensics.compression_score?.toFixed(2) || 'N/A'],
+          ['Font Score', analysis.forensics.font_score?.toFixed(2) || 'N/A'],
+          ['Overall Score', analysis.forensics.overall_score?.toFixed(2) || 'N/A'],
+        ];
 
-          qualityInfo.forEach(([label, value]) => {
-            pdf.setTextColor(40, 40, 40);
-            currentY = addText(`  • ${label}: ${value}`, margin + 10, currentY);
-            currentY += 6;
-          });
-          currentY += 5;
-        }
-
-        // Anomaly Detection
-        if (analysis.forensics_result.anomalies) {
-          pdf.setTextColor(100, 100, 100);
-          currentY = addText('Anomaly Detection:', margin, currentY);
-          currentY += 8;
-
-          const anomalyInfo = [
-            ['Edge Inconsistencies', analysis.forensics_result.anomalies.edge_inconsistencies ? 'Detected' : 'None'],
-            ['Font Inconsistencies', analysis.forensics_result.anomalies.font_inconsistencies ? 'Detected' : 'None'],
-            ['Ink Analysis', analysis.forensics_result.anomalies.ink_analysis ? 'Anomalies Found' : 'Normal'],
-          ];
-
-          anomalyInfo.forEach(([label, value]) => {
-            pdf.setTextColor(40, 40, 40);
-            const color = (value.includes('Detected') || value.includes('Anomalies')) ? [220, 38, 38] as [number, number, number] : [34, 197, 94] as [number, number, number];
-            pdf.setTextColor(...color);
-            currentY = addText(`  • ${label}: ${value}`, margin + 10, currentY);
-            currentY += 6;
-          });
-          currentY += 5;
-        }
-
-        // Confidence Score
-        if (analysis.forensics_result.confidence_score) {
-          pdf.setTextColor(100, 100, 100);
-          currentY = addText('Forensic Confidence:', margin, currentY);
+        forensicsInfo.forEach(([label, value]) => {
           pdf.setTextColor(40, 40, 40);
-          addText(`${(analysis.forensics_result.confidence_score * 100).toFixed(1)}%`, margin + 80, currentY);
-          currentY += 10;
+          currentY = addText(`  • ${label}: ${value}`, margin + 10, currentY);
+          currentY += 6;
+        });
+        currentY += 5;
+
+        // Detected Anomalies
+        pdf.setTextColor(100, 100, 100);
+        currentY = addText('Detected Anomalies:', margin, currentY);
+        currentY += 8;
+
+        if (analysis.forensics.detected_anomalies.length > 0) {
+          analysis.forensics.detected_anomalies.forEach((anomaly) => {
+            pdf.setTextColor(220, 38, 38);
+            currentY = addText(`  • ${anomaly}`, margin + 10, currentY);
+            currentY += 6;
+          });
+        } else {
+          pdf.setTextColor(34, 197, 94);
+          currentY = addText('  • No anomalies detected', margin + 10, currentY);
+          currentY += 6;
         }
+        currentY += 5;
+
+        // Overall Score
+        pdf.setTextColor(100, 100, 100);
+        currentY = addText('Overall Forensics Score:', margin, currentY);
+        pdf.setTextColor(40, 40, 40);
+        addText(`${analysis.forensics.overall_score.toFixed(1)}/100`, margin + 90, currentY);
+        currentY += 10;
       }
 
       // Rule Engine Results Section
-      if (analysis.rule_engine_result) {
+      if (analysis.rules) {
         pdf.setFontSize(16);
         pdf.setTextColor(40, 40, 40);
         currentY = addText('Fraud Detection Rules', margin, currentY);
@@ -229,36 +222,31 @@ export function PDFGenerator({
         pdf.setFontSize(10);
         
         // Summary stats
-        const totalRules = analysis.rule_engine_result.total_rules_checked || 0;
-        const triggeredRules = analysis.rule_engine_result.triggered_rules?.length || 0;
-        const passedRules = totalRules - triggeredRules;
+        const violationCount = analysis.rules.violations?.length || 0;
+        const passedCount = analysis.rules.passed_rules?.length || 0;
+        const totalRules = violationCount + passedCount;
 
         pdf.setTextColor(100, 100, 100);
-        currentY = addText(`Rules Summary: ${totalRules} total, ${triggeredRules} triggered, ${passedRules} passed`, margin, currentY);
+        currentY = addText(`Rules Summary: ${totalRules} total, ${violationCount} violations, ${passedCount} passed`, margin, currentY);
         currentY += 10;
 
-        // Triggered Rules
-        if (analysis.rule_engine_result.triggered_rules && analysis.rule_engine_result.triggered_rules.length > 0) {
+        // Rule Violations
+        if (analysis.rules.violations && analysis.rules.violations.length > 0) {
           pdf.setTextColor(220, 38, 38);
           pdf.setFontSize(12);
-          currentY = addText('⚠ Triggered Rules:', margin, currentY);
+          currentY = addText('⚠ Rule Violations:', margin, currentY);
           currentY += 8;
 
           pdf.setFontSize(10);
-          analysis.rule_engine_result.triggered_rules.forEach((rule, index) => {
+          analysis.rules.violations.forEach((violation, index) => {
             pdf.setTextColor(40, 40, 40);
-            currentY = addText(`${index + 1}. ${rule.rule_name} (Weight: ${rule.weight})`, margin + 10, currentY);
-            currentY += 6;
-            if (rule.description) {
-              pdf.setTextColor(100, 100, 100);
-              currentY = addMultilineText(`   ${rule.description}`, margin + 15, currentY, pageWidth - margin - 30);
-              currentY += 3;
-            }
+            currentY = addMultilineText(`${index + 1}. ${violation}`, margin + 10, currentY, pageWidth - margin - 30);
+            currentY += 3;
           });
         } else {
           pdf.setTextColor(34, 197, 94);
           pdf.setFontSize(12);
-          currentY = addText('✓ No fraud rules triggered - All checks passed', margin, currentY);
+          currentY = addText('✓ No rule violations - All checks passed', margin, currentY);
         }
         currentY += 15;
       }
