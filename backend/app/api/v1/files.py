@@ -20,23 +20,32 @@ async def upload_file(
 ):
     """Upload a check image file to S3 and store metadata in database."""
     
-    # Validate file
-    s3_service.validate_file(file)
+    # Validate file with comprehensive security checks
+    validation_result = await s3_service.validate_file(file)
     
     try:
-        # Upload to S3
-        s3_data = await s3_service.upload_file(file, current_user.id)
+        # Upload to S3 with file hash for secure naming
+        s3_data = await s3_service.upload_file(
+            file, 
+            current_user.id, 
+            validation_result.get('file_hash')
+        )
         
-        # Create file record in database
+        # Create file record in database with validation metadata
         file_record = FileRecord(
             id=str(uuid.uuid4()),
             user_id=current_user.id,
             filename=file.filename,
             s3_key=s3_data['s3_key'],
             s3_url=s3_data['s3_url'],
-            file_size=s3_data['file_size'],
-            mime_type=s3_data['content_type'],
+            file_size=validation_result['file_size'],  # Use validated size
+            mime_type=validation_result['actual_mime_type'],  # Use validated MIME type
         )
+        
+        # Store validation metadata in a separate field if needed
+        # This could be added to the FileRecord model later
+        # file_record.validation_hash = validation_result['file_hash']
+        # file_record.validation_details = validation_result['validation_details']
         
         db.add(file_record)
         await db.commit()
@@ -46,7 +55,7 @@ async def upload_file(
             file_id=file_record.id,
             s3_url=file_record.s3_url,
             upload_timestamp=file_record.upload_timestamp,
-            message="File uploaded successfully"
+            message="File uploaded and validated successfully"
         )
         
     except Exception as e:

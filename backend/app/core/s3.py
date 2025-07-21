@@ -38,41 +38,73 @@ class S3Service:
                 detail="Failed to initialize S3 service"
             )
 
-    def generate_s3_key(self, user_id: str, filename: str) -> str:
-        """Generate a unique S3 key for the file."""
+    def generate_s3_key(self, user_id: str, filename: str, file_hash: str = None) -> str:
+        """Generate a secure S3 key for the file."""
+        import re
+        from pathlib import Path
+        
+        # Generate unique file ID
         file_id = uuid.uuid4().hex
-        # Remove any path separators for security
-        safe_filename = filename.replace('/', '_').replace('\\', '_')
-        return f"uploads/{user_id}/{file_id}_{safe_filename}"
+        
+        # Sanitize filename - remove dangerous characters and normalize
+        safe_filename = re.sub(r'[^\w\-_\.]', '_', filename)
+        safe_filename = safe_filename.strip('._')  # Remove leading/trailing dots and underscores
+        
+        # Limit filename length
+        if len(safe_filename) > 100:
+            name, ext = os.path.splitext(safe_filename)
+            safe_filename = name[:95] + ext
+        
+        # Ensure we have a valid extension
+        if not Path(safe_filename).suffix:
+            safe_filename += '.bin'
+        
+        # Create secure path structure
+        # Use first 2 chars of file_id for sharding to avoid too many files in one directory
+        shard = file_id[:2]
+        
+        # Include file hash in path if provided for additional uniqueness
+        if file_hash:
+            hash_prefix = file_hash[:8]
+            return f"secure-uploads/{user_id}/{shard}/{hash_prefix}_{file_id}_{safe_filename}"
+        else:
+            return f"secure-uploads/{user_id}/{shard}/{file_id}_{safe_filename}"
 
-    async def upload_file(self, file: UploadFile, user_id: str) -> dict:
+    async def upload_file(self, file: UploadFile, user_id: str, file_hash: str = None) -> dict:
         """Upload file to S3 and return file information."""
         try:
-            # Generate S3 key
-            s3_key = self.generate_s3_key(user_id, file.filename)
+            # Generate secure S3 key
+            s3_key = self.generate_s3_key(user_id, file.filename, file_hash)
             
             # Reset file pointer
             file.file.seek(0)
             
-            # Upload to S3
+            # Upload to S3 with enhanced security settings
             self.s3_client.upload_fileobj(
                 file.file,
                 settings.S3_BUCKET_NAME,
                 s3_key,
                 ExtraArgs={
                     'ContentType': file.content_type,
-                    'ServerSideEncryption': 'AES256'
+                    'ServerSideEncryption': 'AES256',
+                    'Metadata': {
+                        'upload-user': user_id,
+                        'file-hash': file_hash or 'unknown',
+                        'upload-timestamp': str(uuid.uuid4().hex)  # Additional entropy
+                    },
+                    'ContentDisposition': 'attachment'  # Force download, don't execute in browser
                 }
             )
             
-            # Generate S3 URL
+            # Generate S3 URL (this should be presigned for access, not public)
             s3_url = f"https://{settings.S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
             
             return {
                 's3_key': s3_key,
                 's3_url': s3_url,
                 'file_size': file.size,
-                'content_type': file.content_type
+                'content_type': file.content_type,
+                'file_hash': file_hash
             }
             
         except ClientError as e:
@@ -135,19 +167,22 @@ class S3Service:
             logger.error(f"Unexpected error generating presigned URL: {e}")
             return None
 
-    def validate_file(self, file: UploadFile) -> bool:
-        """Validate file type and size."""
-        from ..utils.file_utils import validate_file_upload, FileValidationError
+    async def validate_file(self, file: UploadFile) -> dict:
+        """Validate file using comprehensive security checks."""
+        from ..utils.security_validation import validate_upload_security, SecurityValidationError
         
         try:
-            # Use the unified file validation
-            validate_file_upload(file.filename, file.content_type, file.size)
-            return True
+            # Perform comprehensive security validation
+            validation_result = await validate_upload_security(file)
             
-        except FileValidationError as e:
+            logger.info(f"File validation passed for: {file.filename}")
+            return validation_result
+            
+        except SecurityValidationError as e:
+            logger.warning(f"Security validation failed for {file.filename}: {str(e)}")
             raise HTTPException(
                 status_code=400,
-                detail=str(e)
+                detail=f"Security validation failed: {str(e)}"
             )
         except Exception as e:
             logger.error(f"File validation failed: {str(e)}")
