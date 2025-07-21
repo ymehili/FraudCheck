@@ -315,3 +315,4 @@ PRPs
 .env.development
 test.png
 backend/.initialized
+.claude
