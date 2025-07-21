@@ -1,360 +1,374 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from 'react';
-import { DashboardFilter } from '@/types';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
+import { useState, useCallback, useEffect } from 'react';
+import { Calendar, Filter, X, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { RISK_THRESHOLDS } from '@/lib/constants';
 
-interface FilterControlsProps {
-  filters: DashboardFilter;
-  onFiltersChange: (filters: DashboardFilter) => void;
-  onReset: () => void;
-  className?: string;
+export interface FilterState {
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  riskScore: {
+    min: number;
+    max: number;
+  };
+  status: string;
+  search: string;
 }
 
-const TIME_RANGE_OPTIONS = [
-  { value: '', label: 'All Time' },
-  { value: 'last_7_days', label: 'Last 7 Days' },
-  { value: 'last_30_days', label: 'Last 30 Days' },
-  { value: 'last_90_days', label: 'Last 90 Days' },
-  { value: 'last_year', label: 'Last Year' },
-  { value: 'custom', label: 'Custom Range' }
-];
+interface FilterControlsProps {
+  filters?: any;
+  onFiltersChange: (filters: any) => void;
+  className?: string;
+  showSearch?: boolean;
+  showStatusFilter?: boolean;
+  showStatus?: boolean;
+  showRiskRange?: boolean;
+  showDateRange?: boolean;
+  initialFilters?: any;
+  isLoading?: boolean;
+}
 
-const RISK_LEVELS: { value: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; label: string; color: string; }[] = [
-  { value: 'LOW', label: 'Low Risk', color: 'bg-green-100 text-green-800' },
-  { value: 'MEDIUM', label: 'Medium Risk', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'HIGH', label: 'High Risk', color: 'bg-red-100 text-red-800' },
-  { value: 'CRITICAL', label: 'Critical Risk', color: 'bg-red-200 text-red-900' }
-];
+const defaultFilters: FilterState = {
+  dateRange: {
+    start: '',
+    end: '',
+  },
+  riskScore: {
+    min: 0,
+    max: 100,
+  },
+  status: 'all',
+  search: '',
+};
 
-const FILE_TYPES = [
-  { value: 'image/jpeg', label: 'JPEG Images' },
-  { value: 'image/png', label: 'PNG Images' },
-  { value: 'application/pdf', label: 'PDF Documents' }
-];
-
-export default function FilterControls({
-  filters,
+export function FilterControls({
+  filters: externalFilters,
   onFiltersChange,
-  onReset,
-  className = ''
+  className,
+  showSearch = true,
+  showStatus = true,
+  showStatusFilter = false,
+  showRiskRange = true,
+  showDateRange = true,
+  initialFilters = {},
+  isLoading = false,
 }: FilterControlsProps) {
-  const [localFilters, setLocalFilters] = useState<DashboardFilter>(filters);
+  const [filters, setFilters] = useState<any>({
+    ...defaultFilters,
+    ...initialFilters,
+    ...externalFilters,
+  });
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Update local filters when props change
+  // Debounced filter changes
   useEffect(() => {
-    setLocalFilters(filters);
+    const timeoutId = setTimeout(() => {
+      onFiltersChange(filters);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [filters, onFiltersChange]);
+
+  const updateFilter = useCallback((key: string, value: any) => {
+    setFilters((prev: any) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(defaultFilters);
+  }, []);
+
+  const hasActiveFilters = useCallback(() => {
+    return (
+      filters.dateRange.start !== '' ||
+      filters.dateRange.end !== '' ||
+      filters.riskScore.min !== 0 ||
+      filters.riskScore.max !== 100 ||
+      filters.status !== 'all' ||
+      filters.search !== ''
+    );
   }, [filters]);
 
-  const handleFilterChange = (key: keyof DashboardFilter, value: DashboardFilter[keyof DashboardFilter]) => {
-    const newFilters = { ...localFilters, [key]: value };
-    setLocalFilters(newFilters);
-    onFiltersChange(newFilters);
+  const getActiveFilterCount = useCallback(() => {
+    let count = 0;
+    if (filters.dateRange.start || filters.dateRange.end) count++;
+    if (filters.riskScore.min !== 0 || filters.riskScore.max !== 100) count++;
+    if (filters.status && filters.status !== 'all') count++;
+    if (filters.search) count++;
+    return count;
+  }, [filters]);
+
+  const formatDateForInput = (date: Date): string => {
+    return date.toISOString().split('T')[0];
   };
 
-  const handleRiskScoreChange = (type: 'min' | 'max', value: string) => {
-    const numValue = parseInt(value);
-    const newRange = {
-      ...localFilters.riskScoreRange,
-      [type]: isNaN(numValue) ? undefined : numValue
-    };
+  const getPresetDateRanges = () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
     
-    // Remove the range if both values are undefined
-    if (newRange.min === undefined && newRange.max === undefined) {
-      handleFilterChange('riskScoreRange', undefined);
-    } else if (newRange.min !== undefined && newRange.max !== undefined) {
-      handleFilterChange('riskScoreRange', { min: newRange.min, max: newRange.max });
-    } else {
-      handleFilterChange('riskScoreRange', undefined);
-    }
-  };
-
-  const handleDateRangeChange = (type: 'start' | 'end', value: string) => {
-    const newRange = {
-      ...localFilters.customDateRange,
-      [type]: value
-    };
+    const lastWeek = new Date(today);
+    lastWeek.setDate(lastWeek.getDate() - 7);
     
-    // Remove the range if both values are empty
-    if (!newRange.start && !newRange.end) {
-      handleFilterChange('customDateRange', undefined);
-    } else if (newRange.start && newRange.end) {
-      handleFilterChange('customDateRange', { start: newRange.start, end: newRange.end });
-    } else {
-      handleFilterChange('customDateRange', undefined);
-    }
-  };
-
-  const handleRiskLevelToggle = (level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') => {
-    const currentLevels = localFilters.riskLevels || [];
-    const newLevels = currentLevels.includes(level)
-      ? currentLevels.filter(l => l !== level)
-      : [...currentLevels, level];
+    const lastMonth = new Date(today);
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
     
-    handleFilterChange('riskLevels', newLevels.length === 0 ? undefined : newLevels);
-  };
+    const lastYear = new Date(today);
+    lastYear.setFullYear(lastYear.getFullYear() - 1);
 
-  const handleFileTypeToggle = (fileType: string) => {
-    const currentTypes = localFilters.fileTypes || [];
-    const newTypes = currentTypes.includes(fileType)
-      ? currentTypes.filter(t => t !== fileType)
-      : [...currentTypes, fileType];
-    
-    handleFilterChange('fileTypes', newTypes.length === 0 ? undefined : newTypes);
-  };
-
-  const hasActiveFilters = () => {
-    return localFilters.timeRange ||
-           localFilters.customDateRange ||
-           localFilters.riskScoreRange ||
-           localFilters.riskLevels?.length ||
-           localFilters.fileTypes?.length ||
-           localFilters.hasViolations !== undefined ||
-           localFilters.minConfidence !== undefined;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toISOString().split('T')[0];
+    return [
+      { label: 'Today', start: formatDateForInput(today), end: formatDateForInput(today) },
+      { label: 'Yesterday', start: formatDateForInput(yesterday), end: formatDateForInput(yesterday) },
+      { label: 'Last 7 days', start: formatDateForInput(lastWeek), end: formatDateForInput(today) },
+      { label: 'Last 30 days', start: formatDateForInput(lastMonth), end: formatDateForInput(today) },
+      { label: 'Last year', start: formatDateForInput(lastYear), end: formatDateForInput(today) },
+    ];
   };
 
   return (
-    <Card className={className}>
-      <CardHeader>
+    <Card className={cn('w-full', className)}>
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle>Filter Analyses</CardTitle>
+          <CardTitle className="flex items-center space-x-2">
+            <Filter className="h-5 w-5" />
+            <span>Filters</span>
+            {hasActiveFilters() && (
+              <Badge variant="secondary" className="ml-2">
+                {getActiveFilterCount()} active
+              </Badge>
+            )}
+          </CardTitle>
           <div className="flex items-center space-x-2">
             {hasActiveFilters() && (
-              <Button
-                onClick={onReset}
-                variant="ghost"
-                size="sm"
-              >
-                Reset All
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                <X className="h-4 w-4 mr-1" />
+                Clear
               </Button>
             )}
             <Button
-              onClick={() => setIsExpanded(!isExpanded)}
               variant="ghost"
               size="sm"
+              onClick={() => setIsExpanded(!isExpanded)}
             >
-              {isExpanded ? 'Hide Filters' : 'Show Filters'}
+              {isExpanded ? 'Collapse' : 'Expand'}
             </Button>
           </div>
         </div>
       </CardHeader>
-
-      {isExpanded && (
-        <CardContent className="space-y-6">
-          {/* Time Range Filter */}
-          <div>
-            <Label htmlFor="time-range" className="text-sm font-medium">
-              Time Range
-            </Label>
-            <select
-              id="time-range"
-              value={localFilters.timeRange || ''}
-              onChange={(e) => handleFilterChange('timeRange', e.target.value as 'last_7_days' | 'last_30_days' | 'last_90_days' | 'last_year' | 'custom' || undefined)}
-              className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
-            >
-              {TIME_RANGE_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Custom Date Range */}
-          {localFilters.timeRange === 'custom' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="start-date" className="text-sm font-medium">
-                  Start Date
-                </Label>
-                <Input
-                  id="start-date"
-                  type="date"
-                  value={localFilters.customDateRange?.start ? formatDate(localFilters.customDateRange.start) : ''}
-                  onChange={(e) => handleDateRangeChange('start', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="end-date" className="text-sm font-medium">
-                  End Date
-                </Label>
-                <Input
-                  id="end-date"
-                  type="date"
-                  value={localFilters.customDateRange?.end ? formatDate(localFilters.customDateRange.end) : ''}
-                  onChange={(e) => handleDateRangeChange('end', e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Risk Score Range */}
-          <div>
-            <Label className="text-sm font-medium">
-              Risk Score Range
-            </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="min-score" className="text-xs text-muted-foreground">Minimum</Label>
-                <Input
-                  id="min-score"
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="0"
-                  value={localFilters.riskScoreRange?.min || ''}
-                  onChange={(e) => handleRiskScoreChange('min', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="max-score" className="text-xs text-muted-foreground">Maximum</Label>
-                <Input
-                  id="max-score"
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="100"
-                  value={localFilters.riskScoreRange?.max || ''}
-                  onChange={(e) => handleRiskScoreChange('max', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Risk Levels */}
-          <div>
-            <Label className="text-sm font-medium">
-              Risk Levels
-            </Label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {RISK_LEVELS.map(level => (
-                <Button
-                  key={level.value}
-                  onClick={() => handleRiskLevelToggle(level.value)}
-                  variant={localFilters.riskLevels?.includes(level.value) ? "primary" : "outline"}
-                  size="sm"
-                  className={
-                    localFilters.riskLevels?.includes(level.value)
-                      ? level.color
-                      : ''
-                  }
-                >
-                  {level.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* File Types */}
-          <div>
-            <Label className="text-sm font-medium">
-              File Types
-            </Label>
-            <div className="space-y-2">
-              {FILE_TYPES.map(type => (
-                <Label key={type.value} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={localFilters.fileTypes?.includes(type.value) || false}
-                    onChange={() => handleFileTypeToggle(type.value)}
-                    className="h-4 w-4 text-primary border-input rounded focus:ring-ring"
-                  />
-                  <span className="ml-2 text-sm text-foreground">{type.label}</span>
-                </Label>
-              ))}
-            </div>
-          </div>
-
-          {/* Violations Filter */}
-          <div>
-            <Label className="text-sm font-medium">
-              Violations
-            </Label>
-            <div className="space-y-2">
-              <Label className="flex items-center">
-                <input
-                  type="radio"
-                  name="violations"
-                  checked={localFilters.hasViolations === undefined}
-                  onChange={() => handleFilterChange('hasViolations', undefined)}
-                  className="h-4 w-4 text-primary border-input focus:ring-ring"
-                />
-                <span className="ml-2 text-sm text-foreground">All</span>
-              </Label>
-              <Label className="flex items-center">
-                <input
-                  type="radio"
-                  name="violations"
-                  checked={localFilters.hasViolations === true}
-                  onChange={() => handleFilterChange('hasViolations', true)}
-                  className="h-4 w-4 text-primary border-input focus:ring-ring"
-                />
-                <span className="ml-2 text-sm text-foreground">Has Violations</span>
-              </Label>
-              <Label className="flex items-center">
-                <input
-                  type="radio"
-                  name="violations"
-                  checked={localFilters.hasViolations === false}
-                  onChange={() => handleFilterChange('hasViolations', false)}
-                  className="h-4 w-4 text-primary border-input focus:ring-ring"
-                />
-                <span className="ml-2 text-sm text-foreground">No Violations</span>
-              </Label>
-            </div>
-          </div>
-
-          {/* Confidence Threshold */}
-          <div>
-            <Label className="text-sm font-medium">
-              Minimum Confidence Level
-            </Label>
-            <div className="flex items-center space-x-4">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={localFilters.minConfidence ? localFilters.minConfidence * 100 : 0}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  handleFilterChange('minConfidence', value === 0 ? undefined : value / 100);
-                }}
-                className="flex-1"
+      
+      <CardContent className="space-y-4">
+        {/* Search */}
+        {showSearch && (
+          <div className="space-y-2">
+            <Label>Search</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search by filename, analysis ID, or content..."
+                value={filters.search}
+                onChange={(e) => updateFilter('search', e.target.value)}
+                className="pl-10"
               />
-              <span className="text-sm text-muted-foreground w-12">
-                {localFilters.minConfidence ? Math.round(localFilters.minConfidence * 100) : 0}%
-              </span>
             </div>
           </div>
-        </CardContent>
-      )}
+        )}
 
-      {/* Active Filters Summary */}
-      {hasActiveFilters() && (
-        <CardContent className="bg-muted/50 border-t">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-foreground">
-              {Object.keys(localFilters).filter(key => localFilters[key as keyof DashboardFilter] !== undefined).length} filter(s) active
-            </span>
-            <Button
-              onClick={onReset}
-              variant="ghost"
-              size="sm"
-            >
-              Clear All
-            </Button>
+        {/* Date Range */}
+        {showDateRange && (
+          <div className="space-y-2">
+            <Label>Date Range</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Input
+                  type="date"
+                  placeholder="Start date"
+                  value={filters.dateRange.start}
+                  onChange={(e) => updateFilter('dateRange', {
+                    ...filters.dateRange,
+                    start: e.target.value
+                  })}
+                />
+              </div>
+              <div>
+                <Input
+                  type="date"
+                  placeholder="End date"
+                  value={filters.dateRange.end}
+                  onChange={(e) => updateFilter('dateRange', {
+                    ...filters.dateRange,
+                    end: e.target.value
+                  })}
+                />
+              </div>
+            </div>
+            
+            {/* Date Presets */}
+            {isExpanded && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {getPresetDateRanges().map((preset) => (
+                  <Button
+                    key={preset.label}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateFilter('dateRange', {
+                      start: preset.start,
+                      end: preset.end
+                    })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
-        </CardContent>
-      )}
+        )}
+
+        {/* Risk Score Range */}
+        {showRiskRange && (
+          <div className="space-y-2">
+            <Label>Risk Score Range</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Input
+                  type="number"
+                  placeholder="Min score"
+                  min="0"
+                  max="100"
+                  value={filters.riskScore.min}
+                  onChange={(e) => updateFilter('riskScore', {
+                    ...filters.riskScore,
+                    min: parseInt(e.target.value) || 0
+                  })}
+                />
+              </div>
+              <div>
+                <Input
+                  type="number"
+                  placeholder="Max score"
+                  min="0"
+                  max="100"
+                  value={filters.riskScore.max}
+                  onChange={(e) => updateFilter('riskScore', {
+                    ...filters.riskScore,
+                    max: parseInt(e.target.value) || 100
+                  })}
+                />
+              </div>
+            </div>
+            
+            {/* Risk Level Presets */}
+            {isExpanded && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateFilter('riskScore', { min: 0, max: RISK_THRESHOLDS.LOW - 1 })}
+                >
+                  Low Risk (0-24)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateFilter('riskScore', { min: RISK_THRESHOLDS.LOW, max: RISK_THRESHOLDS.MEDIUM - 1 })}
+                >
+                  Medium Risk (25-49)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateFilter('riskScore', { min: RISK_THRESHOLDS.MEDIUM, max: RISK_THRESHOLDS.HIGH - 1 })}
+                >
+                  High Risk (50-74)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateFilter('riskScore', { min: RISK_THRESHOLDS.HIGH, max: 100 })}
+                >
+                  Critical Risk (75-100)
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Status */}
+        {showStatus && (
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select
+              value={filters.status}
+              onValueChange={(value) => updateFilter('status', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="failed">Failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Active Filters Summary */}
+        {hasActiveFilters() && (
+          <div className="pt-2 border-t">
+            <div className="text-sm text-gray-600 mb-2">Active filters:</div>
+            <div className="flex flex-wrap gap-1">
+              {filters.search && (
+                <Badge variant="outline" className="text-xs">
+                  Search: {filters.search}
+                  <X 
+                    className="h-3 w-3 ml-1 cursor-pointer" 
+                    onClick={() => updateFilter('search', '')}
+                  />
+                </Badge>
+              )}
+              
+              {(filters.dateRange.start || filters.dateRange.end) && (
+                <Badge variant="outline" className="text-xs">
+                  Date: {filters.dateRange.start || '...'} to {filters.dateRange.end || '...'}
+                  <X 
+                    className="h-3 w-3 ml-1 cursor-pointer" 
+                    onClick={() => updateFilter('dateRange', { start: '', end: '' })}
+                  />
+                </Badge>
+              )}
+              
+              {(filters.riskScore.min !== 0 || filters.riskScore.max !== 100) && (
+                <Badge variant="outline" className="text-xs">
+                  Risk: {filters.riskScore.min}-{filters.riskScore.max}
+                  <X 
+                    className="h-3 w-3 ml-1 cursor-pointer" 
+                    onClick={() => updateFilter('riskScore', { min: 0, max: 100 })}
+                  />
+                </Badge>
+              )}
+              
+              {filters.status && filters.status !== 'all' && (
+                <Badge variant="outline" className="text-xs">
+                  Status: {filters.status}
+                  <X 
+                    className="h-3 w-3 ml-1 cursor-pointer" 
+                    onClick={() => updateFilter('status', 'all')}
+                  />
+                </Badge>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }

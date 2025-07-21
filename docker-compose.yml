@@ -101,6 +101,10 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ
+      - CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2
+      - NODE_ENV=development
     volumes:
       - ./frontend:/app
       - /app/node_modules

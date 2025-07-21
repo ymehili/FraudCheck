@@ -1,302 +1,292 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  ChartOptions,
-  ChartData,
-  Plugin,
-  TooltipItem
-} from 'chart.js';
-import { RiskScore } from '@/types';
-
-// Register Chart.js components
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn, getRiskLevel, getRiskBadgeColor, formatNumber } from '@/lib/utils';
+import { RiskDistribution } from '@/types/api';
 
 interface RiskScoreChartProps {
-  riskScore: RiskScore;
-  size?: 'small' | 'medium' | 'large';
-  showLegend?: boolean;
-  showTooltip?: boolean;
+  riskDistribution?: RiskDistribution;
+  data?: RiskDistribution | Array<{name: string, value: number, color: string}>;
+  averageRiskScore?: number;
   className?: string;
+  title?: string;
+  showDetails?: boolean;
+  showLegend?: boolean;
 }
 
-const RISK_COLORS = {
-  LOW: '#10B981',      // Green
-  MEDIUM: '#F59E0B',   // Yellow
-  HIGH: '#EF4444',     // Red
-  CRITICAL: '#DC2626'  // Dark Red
-};
-
-const CATEGORY_COLORS = {
-  forensics: '#EF4444',  // Red
-  ocr: '#F59E0B',       // Yellow
-  rules: '#3B82F6'      // Blue
-};
-
-const SIZE_CONFIG = {
-  small: { width: 200, height: 200 },
-  medium: { width: 300, height: 300 },
-  large: { width: 400, height: 400 }
-};
-
-export default function RiskScoreChart({ 
-  riskScore, 
-  size = 'medium', 
-  showLegend = true, 
-  showTooltip = true,
-  className = ''
+export function RiskScoreChart({ 
+  riskDistribution,
+  data,
+  averageRiskScore = 0,
+  className,
+  title = "Risk Score Distribution",
+  showDetails = true,
+  showLegend = false
 }: RiskScoreChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<ChartJS<'doughnut'> | null>(null);
-  const [isClient, setIsClient] = useState(false);
-
-  // Ensure we only render on client side
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isClient || !canvasRef.current) return;
-
-    const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) return;
-
-    // Destroy existing chart
-    if (chartRef.current) {
-      chartRef.current.destroy();
+  const chartData = useMemo(() => {
+    // Use data prop first, then riskDistribution
+    const sourceData = data || riskDistribution;
+    
+    if (!sourceData) {
+      return [];
     }
-
-    // Calculate overall risk level color
-    const getRiskColor = (score: number): string => {
-      if (score >= 80) return RISK_COLORS.CRITICAL;
-      if (score >= 60) return RISK_COLORS.HIGH;
-      if (score >= 30) return RISK_COLORS.MEDIUM;
-      return RISK_COLORS.LOW;
-    };
-
-    // Create center text plugin
-    const centerTextPlugin: Plugin<'doughnut'> = {
-      id: 'centerText',
-      beforeDraw: (chart: ChartJS<'doughnut'>) => {
-        const { ctx, chartArea } = chart;
-        if (!chartArea) return;
-
-        const centerX = (chartArea.left + chartArea.right) / 2;
-        const centerY = (chartArea.top + chartArea.bottom) / 2;
-
-        ctx.save();
-        
-        // Draw overall risk score
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = 'bold 36px system-ui';
-        ctx.fillStyle = getRiskColor(riskScore.overallScore);
-        ctx.fillText(riskScore.overallScore.toString(), centerX, centerY - 10);
-        
-        // Draw risk level
-        ctx.font = '14px system-ui';
-        ctx.fillStyle = '#6B7280';
-        ctx.fillText(riskScore.recommendation, centerX, centerY + 20);
-        
-        ctx.restore();
-      }
-    };
-
-    // Prepare chart data
-    const chartData: ChartData<'doughnut'> = {
-      labels: ['Forensics', 'OCR', 'Rules'],
-      datasets: [{
-        data: [
-          riskScore.categoryScores.forensics,
-          riskScore.categoryScores.ocr,
-          riskScore.categoryScores.rules
-        ],
-        backgroundColor: [
-          CATEGORY_COLORS.forensics,
-          CATEGORY_COLORS.ocr,
-          CATEGORY_COLORS.rules
-        ],
-        borderColor: [
-          CATEGORY_COLORS.forensics,
-          CATEGORY_COLORS.ocr,
-          CATEGORY_COLORS.rules
-        ],
-        borderWidth: 2,
-        hoverOffset: 4,
-        // cutout: '60%' // Chart.js type compatibility - use borderRadius instead
-      }]
-    };
-
-    // Chart configuration
-    const config: ChartOptions<'doughnut'> = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: showLegend,
-          position: 'bottom',
-          labels: {
-            padding: 20,
-            usePointStyle: true,
-            font: {
-              size: 12
-            }
-          }
-        },
-        tooltip: {
-          enabled: showTooltip,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: '#374151',
-          borderWidth: 1,
-          callbacks: {
-            label: (context: TooltipItem<'doughnut'>) => {
-              const label = context.label || '';
-              const value = context.parsed || 0;
-              return `${label}: ${value}%`;
-            }
-          }
-        }
+    
+    // If it's already in the expected array format, return it
+    if (Array.isArray(sourceData)) {
+      return sourceData;
+    }
+    
+    // Convert RiskDistribution to chart format
+    const { low, medium, high, critical, total } = sourceData;
+    
+    return [
+      {
+        label: 'Low Risk',
+        value: low,
+        percentage: total > 0 ? (low / total) * 100 : 0,
+        color: 'bg-green-500',
+        lightColor: 'bg-green-100',
+        textColor: 'text-green-700',
       },
-      elements: {
-        arc: {
-          borderWidth: 2,
-          borderColor: '#fff'
-        }
+      {
+        label: 'Medium Risk',
+        value: medium,
+        percentage: total > 0 ? (medium / total) * 100 : 0,
+        color: 'bg-yellow-500',
+        lightColor: 'bg-yellow-100',
+        textColor: 'text-yellow-700',
       },
-      animation: {
-        animateRotate: true,
-        animateScale: false,
-        duration: 1000,
-        easing: 'easeOutQuart'
-      }
-    };
+      {
+        label: 'High Risk',
+        value: high,
+        percentage: total > 0 ? (high / total) * 100 : 0,
+        color: 'bg-orange-500',
+        lightColor: 'bg-orange-100',
+        textColor: 'text-orange-700',
+      },
+      {
+        label: 'Critical Risk',
+        value: critical,
+        percentage: total > 0 ? (critical / total) * 100 : 0,
+        color: 'bg-red-500',
+        lightColor: 'bg-red-100',
+        textColor: 'text-red-700',
+      },
+    ];
+  }, [data, riskDistribution]);
 
-    // Create chart
-    chartRef.current = new ChartJS(ctx, {
-      type: 'doughnut',
-      data: chartData,
-      options: config,
-      plugins: [centerTextPlugin]
-    });
+  const averageRiskLevel = getRiskLevel(averageRiskScore);
+  const sourceData = data || riskDistribution;
+  const total = Array.isArray(sourceData) ? sourceData.reduce((sum, item) => sum + item.value, 0) : sourceData?.total || 0;
 
-    // Cleanup function
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
-    };
-  }, [isClient, riskScore, showLegend, showTooltip]);
+  return (
+    <Card className={cn('w-full', className)}>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          {title}
+          {averageRiskScore > 0 && (
+            <Badge className={getRiskBadgeColor(averageRiskScore)}>
+              Avg: {Math.round(averageRiskScore)}
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Distribution of risk scores across {formatNumber(total)} analyses
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Bar Chart */}
+        <div className="space-y-3">
+          {chartData.map((item, index) => {
+            const label = 'label' in item ? item.label : item.name;
+            const value = item.value;
+            const percentage = 'percentage' in item ? item.percentage : 
+              total > 0 ? (value / total) * 100 : 0;
+            
+            return (
+              <div key={index} className="space-y-1">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-medium">{label}</span>
+                  <span className="text-gray-600">
+                    {value} ({Math.round(percentage)}%)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={cn('h-full transition-all duration-500 ease-out', 
+                      'color' in item ? item.color : 'bg-blue-500')}
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
-  if (!isClient) {
+        {/* Summary Stats */}
+        {showDetails && (
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900">
+                {formatNumber(total)}
+              </div>
+              <div className="text-sm text-gray-600">Total Analyses</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900">
+                {Math.round(averageRiskScore)}
+              </div>
+              <div className="text-sm text-gray-600">Average Score</div>
+            </div>
+          </div>
+        )}
+
+        {/* Risk Level Indicator */}
+        <div className={cn(
+          'p-3 rounded-lg border text-center',
+          averageRiskLevel === 'low' && 'bg-green-50 border-green-200',
+          averageRiskLevel === 'medium' && 'bg-yellow-50 border-yellow-200',
+          averageRiskLevel === 'high' && 'bg-orange-50 border-orange-200',
+          averageRiskLevel === 'critical' && 'bg-red-50 border-red-200'
+        )}>
+          <div className={cn(
+            'text-sm font-medium capitalize',
+            averageRiskLevel === 'low' && 'text-green-800',
+            averageRiskLevel === 'medium' && 'text-yellow-800',
+            averageRiskLevel === 'high' && 'text-orange-800',
+            averageRiskLevel === 'critical' && 'text-red-800'
+          )}>
+            Overall Risk Level: {averageRiskLevel}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Simplified version for smaller displays
+export function RiskScoreDonut({ 
+  riskDistribution, 
+  averageRiskScore, 
+  size = 120,
+  className 
+}: {
+  riskDistribution: RiskDistribution;
+  averageRiskScore: number;
+  size?: number;
+  className?: string;
+}) {
+  const { low, medium, high, critical, total } = riskDistribution;
+  
+  if (total === 0) {
     return (
-      <div className={`flex items-center justify-center bg-gray-100 rounded-lg ${className}`}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className={cn('flex items-center justify-center', className)} style={{ height: size, width: size }}>
+        <div className="text-center text-gray-500">
+          <div className="text-sm">No data</div>
+        </div>
       </div>
     );
   }
 
+  const radius = (size - 20) / 2;
+  const strokeWidth = 20;
+  const normalizedRadius = radius - strokeWidth * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+
+  const lowPercentage = (low / total) * 100;
+  const mediumPercentage = (medium / total) * 100;
+  const highPercentage = (high / total) * 100;
+  const criticalPercentage = (critical / total) * 100;
+
+  const lowOffset = circumference - (lowPercentage / 100) * circumference;
+  const mediumOffset = lowOffset - (mediumPercentage / 100) * circumference;
+  const highOffset = mediumOffset - (highPercentage / 100) * circumference;
+
   return (
-    <div className={`bg-white rounded-lg shadow-sm border p-6 ${className}`}>
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Risk Score Breakdown</h3>
-        <div className="flex items-center space-x-4 text-sm text-gray-600">
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-            <span>Low (0-29)</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
-            <span>Medium (30-59)</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-            <span>High (60-79)</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-red-600 rounded-full mr-2"></div>
-            <span>Critical (80+)</span>
-          </div>
-        </div>
-      </div>
-
-      <div 
-        className="relative" 
-        style={{ 
-          width: SIZE_CONFIG[size].width, 
-          height: SIZE_CONFIG[size].height 
-        }}
-      >
-        <canvas
-          ref={canvasRef}
-          style={{ 
-            width: '100%', 
-            height: '100%' 
-          }}
+    <div className={cn('relative', className)} style={{ height: size, width: size }}>
+      <svg height={size} width={size} className="transform -rotate-90">
+        {/* Background circle */}
+        <circle
+          stroke="#e5e7eb"
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          r={normalizedRadius}
+          cx={size / 2}
+          cy={size / 2}
         />
-      </div>
-
-      {/* Risk factors section */}
-      {riskScore.riskFactors.length > 0 && (
-        <div className="mt-6">
-          <h4 className="text-sm font-medium text-gray-900 mb-3">Risk Factors</h4>
-          <div className="space-y-2">
-            {riskScore.riskFactors.slice(0, 3).map((factor, index) => (
-              <div key={index} className="flex items-start text-sm">
-                <div className="w-2 h-2 bg-red-500 rounded-full mt-1.5 mr-2 flex-shrink-0"></div>
-                <span className="text-gray-700">{factor}</span>
-              </div>
-            ))}
-            {riskScore.riskFactors.length > 3 && (
-              <div className="text-sm text-gray-500">
-                +{riskScore.riskFactors.length - 3} more risk factors
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Confidence level */}
-      <div className="mt-6 pt-4 border-t border-gray-200">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Confidence Level</span>
-          <span className="font-medium text-gray-900">
-            {Math.round(riskScore.confidenceLevel * 100)}%
-          </span>
-        </div>
-        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-          <div 
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${riskScore.confidenceLevel * 100}%` }}
-          ></div>
-        </div>
-      </div>
-
-      {/* Category scores breakdown */}
-      <div className="mt-6 grid grid-cols-3 gap-4">
+        
+        {/* Low risk segment */}
+        {low > 0 && (
+          <circle
+            stroke="#10b981"
+            fill="transparent"
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={lowOffset}
+            strokeLinecap="round"
+            r={normalizedRadius}
+            cx={size / 2}
+            cy={size / 2}
+            className="transition-all duration-300"
+          />
+        )}
+        
+        {/* Medium risk segment */}
+        {medium > 0 && (
+          <circle
+            stroke="#f59e0b"
+            fill="transparent"
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${(mediumPercentage / 100) * circumference} ${circumference}`}
+            strokeDashoffset={mediumOffset}
+            strokeLinecap="round"
+            r={normalizedRadius}
+            cx={size / 2}
+            cy={size / 2}
+            className="transition-all duration-300"
+          />
+        )}
+        
+        {/* High risk segment */}
+        {high > 0 && (
+          <circle
+            stroke="#f97316"
+            fill="transparent"
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${(highPercentage / 100) * circumference} ${circumference}`}
+            strokeDashoffset={highOffset}
+            strokeLinecap="round"
+            r={normalizedRadius}
+            cx={size / 2}
+            cy={size / 2}
+            className="transition-all duration-300"
+          />
+        )}
+        
+        {/* Critical risk segment */}
+        {critical > 0 && (
+          <circle
+            stroke="#ef4444"
+            fill="transparent"
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${(criticalPercentage / 100) * circumference} ${circumference}`}
+            strokeDashoffset={highOffset - (criticalPercentage / 100) * circumference}
+            strokeLinecap="round"
+            r={normalizedRadius}
+            cx={size / 2}
+            cy={size / 2}
+            className="transition-all duration-300"
+          />
+        )}
+      </svg>
+      
+      {/* Center text */}
+      <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-sm text-gray-600">Forensics</div>
-          <div className="text-lg font-semibold text-red-600">
-            {riskScore.categoryScores.forensics}%
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-sm text-gray-600">OCR</div>
-          <div className="text-lg font-semibold text-yellow-600">
-            {riskScore.categoryScores.ocr}%
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-sm text-gray-600">Rules</div>
-          <div className="text-lg font-semibold text-blue-600">
-            {riskScore.categoryScores.rules}%
-          </div>
+          <div className="text-lg font-bold">{Math.round(averageRiskScore)}</div>
+          <div className="text-xs text-gray-600">Avg Risk</div>
         </div>
       </div>
     </div>

@@ -1,202 +1,354 @@
-"use client";
+'use client';
 
 import { useState } from 'react';
-
-interface ReportData {
-  fileId: string;
-  filename: string;
-  uploadDate: string;
-  fileSize: string;
-  analysisResults?: {
-    riskScore: number;
-    detectedIssues: string[];
-    confidence: number;
-    recommendations: string[];
-  };
-}
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Download, FileText, Loader2 } from 'lucide-react';
+import { AnalysisResponse } from '@/types/api';
+import { formatDate, formatCurrency, getRiskLevel } from '@/lib/utils';
 
 interface PDFGeneratorProps {
-  reportData: ReportData;
-  onError?: (error: string) => void;
+  analysis: AnalysisResponse;
+  fileName?: string;
+  className?: string;
 }
 
-const PDFGenerator: React.FC<PDFGeneratorProps> = ({ reportData, onError }) => {
+export function PDFGenerator({ 
+  analysis, 
+  fileName = `check-analysis-${analysis.analysis_id.slice(-8)}.pdf`,
+  className = ""
+}: PDFGeneratorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const generatePDF = async () => {
-    setIsGenerating(true);
-    
     try {
-      // Dynamic import to avoid SSR issues
+      setIsGenerating(true);
+      setError(null);
+
+      // Dynamic import to avoid SSR issues with jsPDF
       const { jsPDF } = await import('jspdf');
       
-      // Create new PDF document
-      const doc = new jsPDF();
-      
-      // PDF Configuration
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
+      // Create PDF document
+      const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.width;
+      const pageHeight = pdf.internal.pageSize.height;
       const margin = 20;
-      const lineHeight = 7;
-      let yPosition = margin;
+      let currentY = margin;
 
-      // Helper function to add text with word wrap
-      const addText = (text: string, x: number, y: number, maxWidth: number, fontSize: number = 12) => {
-        doc.setFontSize(fontSize);
-        const textLines = doc.splitTextToSize(text, maxWidth);
-        doc.text(textLines, x, y);
-        return y + (textLines.length * lineHeight);
+      // Helper function to add text with automatic page breaks
+      const addText = (text: string, x: number, y: number, options?: any) => {
+        if (y > pageHeight - margin) {
+          pdf.addPage();
+          currentY = margin;
+          y = currentY;
+        }
+        pdf.text(text, x, y, options);
+        return y;
       };
 
-      // Header
-      doc.setFontSize(20);
-      doc.setFont('helvetica', 'bold');
-      doc.text('CheckGuard AI - Analysis Report', margin, yPosition);
-      yPosition += 15;
+      // Helper function to add multiline text
+      const addMultilineText = (text: string, x: number, y: number, maxWidth: number) => {
+        const lines = pdf.splitTextToSize(text, maxWidth);
+        for (let i = 0; i < lines.length; i++) {
+          if (y > pageHeight - margin) {
+            pdf.addPage();
+            y = margin;
+          }
+          pdf.text(lines[i], x, y);
+          y += 6;
+        }
+        return y;
+      };
 
-      // Add a horizontal line
-      doc.setLineWidth(0.5);
-      doc.line(margin, yPosition, pageWidth - margin, yPosition);
-      yPosition += 10;
+      // Title and Header
+      pdf.setFontSize(24);
+      pdf.setTextColor(40, 40, 40);
+      currentY = addText('CheckGuard AI - Analysis Report', margin, currentY);
+      currentY += 15;
 
-      // File Information Section
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('File Information', margin, yPosition);
-      yPosition += 10;
+      // Subtitle
+      pdf.setFontSize(14);
+      pdf.setTextColor(100, 100, 100);
+      currentY = addText(`Analysis Report for Check #${analysis.analysis_id.slice(-8)}`, margin, currentY);
+      currentY += 10;
 
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      yPosition = addText(`File ID: ${reportData.fileId}`, margin, yPosition, pageWidth - 2 * margin);
-      yPosition = addText(`Filename: ${reportData.filename}`, margin, yPosition, pageWidth - 2 * margin);
-      yPosition = addText(`Upload Date: ${reportData.uploadDate}`, margin, yPosition, pageWidth - 2 * margin);
-      yPosition = addText(`File Size: ${reportData.fileSize}`, margin, yPosition, pageWidth - 2 * margin);
-      yPosition += 10;
+      // Date line
+      pdf.setFontSize(12);
+      currentY = addText(`Generated on ${formatDate(new Date())}`, margin, currentY);
+      currentY += 20;
 
-      // Analysis Results Section (if available)
-      if (reportData.analysisResults) {
-        const { riskScore, detectedIssues, confidence, recommendations } = reportData.analysisResults;
+      // Executive Summary Box
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin, currentY - 5, pageWidth - 2 * margin, 40, 'FD');
+      
+      pdf.setFontSize(16);
+      pdf.setTextColor(40, 40, 40);
+      currentY = addText('Executive Summary', margin + 10, currentY + 5);
+      currentY += 10;
 
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Analysis Results', margin, yPosition);
-        yPosition += 10;
+      pdf.setFontSize(12);
+      const riskLevel = getRiskLevel(analysis.risk_score);
+      const riskColor = analysis.risk_score >= 75 ? [220, 38, 38] as [number, number, number] : 
+                       analysis.risk_score >= 50 ? [245, 158, 11] as [number, number, number] : [34, 197, 94] as [number, number, number];
+      
+      pdf.setTextColor(...riskColor);
+      currentY = addText(`Risk Level: ${riskLevel.toUpperCase()}`, margin + 10, currentY);
+      
+      pdf.setTextColor(40, 40, 40);
+      currentY = addText(`Risk Score: ${analysis.risk_score}/100`, pageWidth - margin - 80, currentY - 6);
+      currentY += 10;
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 100, 100);
+      const summaryText = `Analysis completed on ${formatDate(analysis.created_at)}${analysis.processing_time ? ` in ${analysis.processing_time.toFixed(1)} seconds` : ''}`;
+      currentY = addText(summaryText, margin + 10, currentY);
+      currentY += 25;
+
+      // Analysis Details Section
+      pdf.setFontSize(16);
+      pdf.setTextColor(40, 40, 40);
+      currentY = addText('Analysis Details', margin, currentY);
+      currentY += 10;
+
+      // Analysis Info Table
+      pdf.setFontSize(10);
+      const analysisInfo = [
+        ['Analysis ID', `#${analysis.analysis_id}`],
+        ['File ID', `#${analysis.file_id}`],
+        ['Created Date', formatDate(analysis.created_at)],
+        ['Processing Time', analysis.processing_time ? `${analysis.processing_time.toFixed(1)} seconds` : 'N/A'],
+        ['Risk Score', `${analysis.risk_score}/100`],
+        ['Risk Level', getRiskLevel(analysis.risk_score).toUpperCase()],
+      ];
+
+      analysisInfo.forEach(([label, value]) => {
+        pdf.setTextColor(100, 100, 100);
+        currentY = addText(`${label}:`, margin, currentY);
+        pdf.setTextColor(40, 40, 40);
+        addText(value, margin + 60, currentY);
+        currentY += 8;
+      });
+      currentY += 10;
+
+      // OCR Results Section
+      if (analysis.ocr_result) {
+        pdf.setFontSize(16);
+        pdf.setTextColor(40, 40, 40);
+        currentY = addText('Extracted Information (OCR)', margin, currentY);
+        currentY += 10;
+
+        const ocrInfo = [
+          ['Payee', analysis.ocr_result.payee || 'Not detected'],
+          ['Amount', analysis.ocr_result.amount ? formatCurrency(analysis.ocr_result.amount) : 'Not detected'],
+          ['Date', analysis.ocr_result.date || 'Not detected'],
+          ['Check Number', analysis.ocr_result.check_number || 'Not detected'],
+          ['Account Number', analysis.ocr_result.account_number || 'Not detected'],
+          ['Routing Number', analysis.ocr_result.routing_number || 'Not detected'],
+        ];
+
+        pdf.setFontSize(10);
+        ocrInfo.forEach(([label, value]) => {
+          pdf.setTextColor(100, 100, 100);
+          currentY = addText(`${label}:`, margin, currentY);
+          pdf.setTextColor(40, 40, 40);
+          currentY = addMultilineText(value, margin + 60, currentY, pageWidth - margin - 80);
+          currentY += 2;
+        });
+        currentY += 10;
+      }
+
+      // Forensic Analysis Section
+      if (analysis.forensics_result) {
+        pdf.setFontSize(16);
+        pdf.setTextColor(40, 40, 40);
+        currentY = addText('Forensic Analysis', margin, currentY);
+        currentY += 10;
+
+        pdf.setFontSize(10);
         
-        // Risk Score
-        yPosition = addText(`Risk Score: ${riskScore}/100`, margin, yPosition, pageWidth - 2 * margin);
-        yPosition = addText(`Confidence Level: ${confidence}%`, margin, yPosition, pageWidth - 2 * margin);
-        yPosition += 5;
+        // Image Quality
+        if (analysis.forensics_result.image_quality) {
+          pdf.setTextColor(100, 100, 100);
+          currentY = addText('Image Quality Assessment:', margin, currentY);
+          currentY += 8;
 
-        // Detected Issues
-        if (detectedIssues.length > 0) {
-          doc.setFont('helvetica', 'bold');
-          yPosition = addText('Detected Issues:', margin, yPosition, pageWidth - 2 * margin);
-          doc.setFont('helvetica', 'normal');
-          
-          detectedIssues.forEach((issue, index) => {
-            yPosition = addText(`${index + 1}. ${issue}`, margin + 10, yPosition, pageWidth - 2 * margin - 10);
+          const qualityInfo = [
+            ['Resolution', analysis.forensics_result.image_quality.resolution || 'N/A'],
+            ['Compression Ratio', analysis.forensics_result.image_quality.compression_ratio || 'N/A'],
+            ['Clarity Score', analysis.forensics_result.image_quality.clarity_score || 'N/A'],
+          ];
+
+          qualityInfo.forEach(([label, value]) => {
+            pdf.setTextColor(40, 40, 40);
+            currentY = addText(`  • ${label}: ${value}`, margin + 10, currentY);
+            currentY += 6;
           });
-          yPosition += 5;
+          currentY += 5;
         }
 
-        // Recommendations
-        if (recommendations.length > 0) {
-          doc.setFont('helvetica', 'bold');
-          yPosition = addText('Recommendations:', margin, yPosition, pageWidth - 2 * margin);
-          doc.setFont('helvetica', 'normal');
-          
-          recommendations.forEach((recommendation, index) => {
-            yPosition = addText(`${index + 1}. ${recommendation}`, margin + 10, yPosition, pageWidth - 2 * margin - 10);
-          });
-          yPosition += 5;
-        }
-      } else {
-        // No analysis results yet
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Analysis Status', margin, yPosition);
-        yPosition += 10;
+        // Anomaly Detection
+        if (analysis.forensics_result.anomalies) {
+          pdf.setTextColor(100, 100, 100);
+          currentY = addText('Anomaly Detection:', margin, currentY);
+          currentY += 8;
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'normal');
-        yPosition = addText('Analysis is pending. This report contains file upload information only.', margin, yPosition, pageWidth - 2 * margin);
-        yPosition += 10;
+          const anomalyInfo = [
+            ['Edge Inconsistencies', analysis.forensics_result.anomalies.edge_inconsistencies ? 'Detected' : 'None'],
+            ['Font Inconsistencies', analysis.forensics_result.anomalies.font_inconsistencies ? 'Detected' : 'None'],
+            ['Ink Analysis', analysis.forensics_result.anomalies.ink_analysis ? 'Anomalies Found' : 'Normal'],
+          ];
+
+          anomalyInfo.forEach(([label, value]) => {
+            pdf.setTextColor(40, 40, 40);
+            const color = (value.includes('Detected') || value.includes('Anomalies')) ? [220, 38, 38] as [number, number, number] : [34, 197, 94] as [number, number, number];
+            pdf.setTextColor(...color);
+            currentY = addText(`  • ${label}: ${value}`, margin + 10, currentY);
+            currentY += 6;
+          });
+          currentY += 5;
+        }
+
+        // Confidence Score
+        if (analysis.forensics_result.confidence_score) {
+          pdf.setTextColor(100, 100, 100);
+          currentY = addText('Forensic Confidence:', margin, currentY);
+          pdf.setTextColor(40, 40, 40);
+          addText(`${(analysis.forensics_result.confidence_score * 100).toFixed(1)}%`, margin + 80, currentY);
+          currentY += 10;
+        }
+      }
+
+      // Rule Engine Results Section
+      if (analysis.rule_engine_result) {
+        pdf.setFontSize(16);
+        pdf.setTextColor(40, 40, 40);
+        currentY = addText('Fraud Detection Rules', margin, currentY);
+        currentY += 10;
+
+        pdf.setFontSize(10);
+        
+        // Summary stats
+        const totalRules = analysis.rule_engine_result.total_rules_checked || 0;
+        const triggeredRules = analysis.rule_engine_result.triggered_rules?.length || 0;
+        const passedRules = totalRules - triggeredRules;
+
+        pdf.setTextColor(100, 100, 100);
+        currentY = addText(`Rules Summary: ${totalRules} total, ${triggeredRules} triggered, ${passedRules} passed`, margin, currentY);
+        currentY += 10;
+
+        // Triggered Rules
+        if (analysis.rule_engine_result.triggered_rules && analysis.rule_engine_result.triggered_rules.length > 0) {
+          pdf.setTextColor(220, 38, 38);
+          pdf.setFontSize(12);
+          currentY = addText('⚠ Triggered Rules:', margin, currentY);
+          currentY += 8;
+
+          pdf.setFontSize(10);
+          analysis.rule_engine_result.triggered_rules.forEach((rule, index) => {
+            pdf.setTextColor(40, 40, 40);
+            currentY = addText(`${index + 1}. ${rule.rule_name} (Weight: ${rule.weight})`, margin + 10, currentY);
+            currentY += 6;
+            if (rule.description) {
+              pdf.setTextColor(100, 100, 100);
+              currentY = addMultilineText(`   ${rule.description}`, margin + 15, currentY, pageWidth - margin - 30);
+              currentY += 3;
+            }
+          });
+        } else {
+          pdf.setTextColor(34, 197, 94);
+          pdf.setFontSize(12);
+          currentY = addText('✓ No fraud rules triggered - All checks passed', margin, currentY);
+        }
+        currentY += 15;
       }
 
       // Footer
-      yPosition = pageHeight - 30;
-      doc.setLineWidth(0.5);
-      doc.line(margin, yPosition, pageWidth - margin, yPosition);
-      yPosition += 10;
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Generated by CheckGuard AI', margin, yPosition);
-      doc.text(new Date().toLocaleString(), pageWidth - margin - 60, yPosition);
-      yPosition += 5;
-      doc.text('© 2024 CheckGuard AI. All rights reserved.', margin, yPosition);
+      const footerY = pageHeight - 15;
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text('Generated by CheckGuard AI - Fraud Detection System', margin, footerY);
+      pdf.text(`Page 1 of ${pdf.internal.pages.length - 1}`, pageWidth - margin - 30, footerY);
 
       // Save the PDF
-      const fileName = `checkguard-report-${reportData.fileId}.pdf`;
-      doc.save(fileName);
+      pdf.save(fileName);
 
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      onError?.('Failed to generate PDF report. Please try again.');
+      console.error('Failed to generate PDF:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate PDF report');
     } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center space-y-4">
-      <div className="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Generate PDF Report</h3>
-        
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">
-            Generate a comprehensive PDF report containing file information and analysis results.
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-500">
-            Report for: {reportData.filename}
-          </div>
-          <button
-            onClick={generatePDF}
-            disabled={isGenerating}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Generating...
-              </>
-            ) : (
-              <>
-                <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Generate PDF
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="text-xs text-gray-500 text-center max-w-md">
-        PDF reports include file information, analysis results, and recommendations. 
-        The generated PDF will be automatically downloaded to your device.
-      </div>
+    <div className={className}>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      <Button 
+        onClick={generatePDF}
+        disabled={isGenerating}
+        className="w-full sm:w-auto"
+      >
+        {isGenerating ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Generating PDF...
+          </>
+        ) : (
+          <>
+            <Download className="h-4 w-4 mr-2" />
+            Download PDF Report
+          </>
+        )}
+      </Button>
+      
+      <p className="text-xs text-gray-500 mt-2">
+        Generate a comprehensive PDF report of this analysis including all findings and recommendations.
+      </p>
     </div>
   );
-};
+}
 
-export default PDFGenerator;
+// Hook for PDF generation functionality
+export function usePDFGenerator() {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateAnalysisReport = async (
+    analysis: AnalysisResponse, 
+    fileName?: string
+  ): Promise<boolean> => {
+    try {
+      setIsGenerating(true);
+      setError(null);
+
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF();
+      
+      // Use the same PDF generation logic as the component
+      // This is extracted for reusability in other parts of the app
+      
+      const reportFileName = fileName || `check-analysis-${analysis.analysis_id.slice(-8)}.pdf`;
+      pdf.save(reportFileName);
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate PDF report');
+      return false;
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return {
+    generateAnalysisReport,
+    isGenerating,
+    error,
+  };
+}

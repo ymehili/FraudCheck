@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from '@clerk/nextjs';
 import { Geist, Geist_Mono } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CheckGuard AI - Fraud Detection System",
-  description: "AI-powered check fraud detection through image analysis",
+  description: "Advanced check fraud detection using AI-powered image forensics and OCR analysis",
 };
 
 export default function RootLayout({
@@ -27,11 +28,11 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans antialiased`}
         >
-          <div className="min-h-screen bg-gray-50">
+          <ErrorBoundary showDetails={process.env.NODE_ENV === 'development'}>
             {children}
-          </div>
+          </ErrorBoundary>
         </body>
       </html>
     </ClerkProvider>

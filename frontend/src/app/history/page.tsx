@@ -1,30 +1,66 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
-import AnalysisHistory from '@/components/AnalysisHistory';
-import FilterControls from '@/components/FilterControls';
-import { EnhancedAnalysisResult, DashboardFilter, PaginationParams } from '@/types';
-import { Card, CardContent } from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
+import { NavigationBar } from '@/components/NavigationBar';
+import { FilterControls } from '@/components/FilterControls';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { 
+  AlertTriangle,
+  FileText,
+  Eye,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Filter
+} from 'lucide-react';
+import { usePDFGenerator } from '@/components/PDFGenerator';
+import { api } from '@/lib/api';
+import { AnalysisHistoryItem, PaginatedResponse } from '@/types/api';
+import { formatDate, getRiskLevel, cn } from '@/lib/utils';
+import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
+import Link from 'next/link';
+
+interface HistoryFilters {
+  start_date?: string;
+  end_date?: string;
+  min_risk_score?: number;
+  max_risk_score?: number;
+  status?: string;
+}
 
 export default function HistoryPage() {
   const { getToken } = useAuth();
-  const router = useRouter();
-  const [analyses, setAnalyses] = useState<EnhancedAnalysisResult[]>([]);
-  const [pagination, setPagination] = useState<PaginationParams>({
+  const { generateAnalysisReport, isGenerating } = usePDFGenerator();
+  const [analyses, setAnalyses] = useState<AnalysisHistoryItem[]>([]);
+  const [pagination, setPagination] = useState({
     page: 1,
-    perPage: 20,
-    sortField: 'analysis_timestamp',
-    sortDirection: 'desc'
+    size: 20,
+    total: 0,
+    pages: 0
   });
-  const [filters, setFilters] = useState<DashboardFilter>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<HistoryFilters>({});
+  const [showFilters, setShowFilters] = useState(false);
 
-  const fetchAnalysisHistory = useCallback(async () => {
+  const fetchAnalysisHistory = async (
+    page: number = 1, 
+    currentFilters: HistoryFilters = {}
+  ) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -34,323 +70,351 @@ export default function HistoryPage() {
         throw new Error('Authentication token not available');
       }
 
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append('page', pagination.page.toString());
-      params.append('per_page', pagination.perPage.toString());
-      if (pagination.sortField) {
-        params.append('sort_field', pagination.sortField);
-      }
-      if (pagination.sortDirection) {
-        params.append('sort_direction', pagination.sortDirection);
-      }
-
-      // Add filters
-      if (filters.timeRange) {
-        params.append('time_range', filters.timeRange);
-      }
-      if (filters.customDateRange) {
-        params.append('start_date', filters.customDateRange.start);
-        params.append('end_date', filters.customDateRange.end);
-      }
-      if (filters.riskScoreRange) {
-        if (filters.riskScoreRange.min !== undefined) {
-          params.append('min_risk_score', filters.riskScoreRange.min.toString());
-        }
-        if (filters.riskScoreRange.max !== undefined) {
-          params.append('max_risk_score', filters.riskScoreRange.max.toString());
-        }
-      }
-      if (filters.riskLevels && filters.riskLevels.length > 0) {
-        filters.riskLevels.forEach(level => {
-          params.append('risk_levels', level);
-        });
-      }
-      if (filters.fileTypes && filters.fileTypes.length > 0) {
-        filters.fileTypes.forEach(type => {
-          params.append('file_types', type);
-        });
-      }
-      if (filters.hasViolations !== undefined) {
-        params.append('has_violations', filters.hasViolations.toString());
-      }
-      if (filters.minConfidence !== undefined) {
-        params.append('min_confidence', filters.minConfidence.toString());
-      }
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/dashboard/history?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      const response = await api.getAnalysisHistory(
+        token, 
+        page, 
+        pagination.size, 
+        currentFilters
+      );
+      
+      setAnalyses(response.items);
+      setPagination({
+        page: response.page,
+        size: response.size,
+        total: response.total,
+        pages: response.pages
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch analysis history');
-      }
-
-      const data = await response.json();
-      
-      // Transform API response to match our types
-      const transformedAnalyses: EnhancedAnalysisResult[] = data.analyses.map((analysis: {
-        id: string;
-        file_id: string;
-        filename: string;
-        file_size: number;
-        mime_type: string;
-        upload_timestamp: string;
-        analysis_timestamp: string;
-        risk_score_details: {
-          overall_score: number;
-          category_scores: Record<string, number>;
-          risk_factors: string[];
-          confidence_level: number;
-          recommendation: string;
-        };
-        forensics_score: number;
-        ocr_confidence: number;
-        overall_risk_score: number;
-        violations: string[];
-        processing_time: number | null;
-      }) => ({
-        id: analysis.id,
-        fileId: analysis.file_id,
-        filename: analysis.filename,
-        fileSize: analysis.file_size,
-        mimeType: analysis.mime_type,
-        uploadTimestamp: analysis.upload_timestamp,
-        analysisTimestamp: analysis.analysis_timestamp,
-        riskScore: {
-          overallScore: analysis.risk_score_details.overall_score,
-          categoryScores: analysis.risk_score_details.category_scores,
-          riskFactors: analysis.risk_score_details.risk_factors,
-          confidenceLevel: analysis.risk_score_details.confidence_level,
-          recommendation: analysis.risk_score_details.recommendation
-        },
-        forensicsScore: analysis.forensics_score,
-        ocrConfidence: analysis.ocr_confidence,
-        overallRiskScore: analysis.overall_risk_score,
-        violations: analysis.violations,
-        processingTime: analysis.processing_time
-      }));
-
-      setAnalyses(transformedAnalyses);
-      
-      // Update pagination info if available
-      if (data.pagination) {
-        setPagination(prev => ({
-          ...prev,
-          page: data.pagination.page,
-          perPage: data.pagination.per_page
-        }));
-      }
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analysis history');
+    } catch (error) {
+      console.error('Failed to fetch analysis history:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load analysis history');
     } finally {
       setIsLoading(false);
     }
-  }, [getToken, pagination, filters]);
+  };
 
   useEffect(() => {
-    fetchAnalysisHistory();
-  }, [fetchAnalysisHistory]);
+    fetchAnalysisHistory(1, filters);
+  }, []);
 
-  const handlePageChange = (page: number) => {
-    setPagination(prev => ({ ...prev, page }));
-  };
-
-  const handleSortChange = (field: string, direction: 'asc' | 'desc') => {
-    setPagination(prev => ({ 
-      ...prev, 
-      sortField: field, 
-      sortDirection: direction,
-      page: 1 // Reset to first page when sorting
-    }));
-  };
-
-  const handleFiltersChange = (newFilters: DashboardFilter) => {
+  const handleFiltersChange = (newFilters: HistoryFilters) => {
     setFilters(newFilters);
-    setPagination(prev => ({ ...prev, page: 1 })); // Reset to first page when filtering
+    fetchAnalysisHistory(1, newFilters);
   };
 
-  const handleFiltersReset = () => {
-    setFilters({});
-    setPagination(prev => ({ ...prev, page: 1 }));
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.pages) {
+      fetchAnalysisHistory(newPage, filters);
+    }
   };
 
-  const handleViewDetails = (analysisId: string) => {
-    router.push(`/analysis/${analysisId}`);
+  const handleRefresh = () => {
+    fetchAnalysisHistory(pagination.page, filters);
   };
 
-  const handleExportPDF = async (analysisId: string) => {
+  const handleDownloadPDF = async (analysisId: string) => {
     try {
       const token = await getToken();
       if (!token) {
         throw new Error('Authentication token not available');
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analysis/${analysisId}/export-pdf`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to export PDF');
-      }
-
-      // Create a blob from the response
-      const blob = await response.blob();
+      // Get the full analysis data
+      const analysisData = await api.getAnalysis(analysisId, token);
       
-      // Create a download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `analysis-${analysisId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-    } catch (err) {
-      console.error('Export failed:', err);
-      // You might want to show a toast notification here
+      // Generate PDF
+      await generateAnalysisReport(
+        analysisData, 
+        `check-analysis-${analysisId.slice(-8)}.pdf`
+      );
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Analysis History</h1>
-          <p className="text-muted-foreground">Review and manage your check analysis results</p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <Button
-            onClick={fetchAnalysisHistory}
-            variant="outline"
-            size="sm"
-          >
-            <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </Button>
+  const getRiskBadgeVariant = (riskScore: number) => {
+    if (riskScore >= RISK_THRESHOLDS.HIGH) return 'destructive';
+    if (riskScore >= RISK_THRESHOLDS.MEDIUM) return 'default';
+    return 'secondary';
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'default';
+      case 'processing':
+        return 'secondary';
+      case 'failed':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <NavigationBar />
+        <div className="max-w-7xl mx-auto px-4 py-12">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {error}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                className="ml-4"
+              >
+                Try Again
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
       </div>
+    );
+  }
 
-      {/* Filters */}
-      <FilterControls
-        filters={filters}
-        onFiltersChange={handleFiltersChange}
-        onReset={handleFiltersReset}
-      />
-
-      {/* Error State */}
-      {error && (
-        <Alert variant="destructive">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
-          <AlertDescription>
-            <div>
-              <h3 className="text-sm font-medium">Error loading history</h3>
-              <p className="text-sm mt-1">{error}</p>
-            </div>
-            <Button
-              onClick={fetchAnalysisHistory}
-              variant="outline"
-              size="sm"
-              className="mt-3"
-            >
-              Try Again
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Analysis History Table */}
-      <AnalysisHistory
-        analyses={analyses}
-        pagination={pagination}
-        onPageChange={handlePageChange}
-        onSortChange={handleSortChange}
-        onViewDetails={handleViewDetails}
-        onExportPDF={handleExportPDF}
-        isLoading={isLoading}
-      />
-
-      {/* Empty State */}
-      {!isLoading && !error && analyses.length === 0 && (
-        <Card className="p-12 text-center">
-          <CardContent>
-            <svg className="w-16 h-16 text-muted-foreground mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <h3 className="text-lg font-medium text-foreground mb-2">No analyses found</h3>
-            <p className="text-muted-foreground mb-6">
-              {Object.keys(filters).length > 0 
-                ? 'No analyses match your current filters. Try adjusting your search criteria.'
-                : 'You haven\'t analyzed any checks yet. Upload a check to get started.'
-              }
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <NavigationBar />
+      
+      <div className="max-w-7xl mx-auto px-4 py-12">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Analysis History
+            </h1>
+            <p className="text-lg text-gray-600">
+              View and manage all your check analysis results
             </p>
-            <div className="flex justify-center space-x-4">
-              {Object.keys(filters).length > 0 && (
-                <Button
-                  onClick={handleFiltersReset}
-                  variant="outline"
-                >
-                  Clear Filters
-                </Button>
-              )}
-              <Button
-                onClick={() => router.push('/upload')}
-                variant="primary"
-              >
-                Upload Check
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
+        </div>
 
-      {/* Results Summary */}
-      {!isLoading && !error && analyses.length > 0 && (
+        {/* Filters */}
+        {showFilters && (
+          <div className="mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Filter Results</CardTitle>
+                <CardDescription>
+                  Narrow down the analysis history by date, risk score, or status
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FilterControls
+                  filters={filters}
+                  onFiltersChange={handleFiltersChange}
+                  isLoading={isLoading}
+                  showStatusFilter={true}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Statistics Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Total Analyses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {isLoading ? <Skeleton className="h-8 w-16" /> : pagination.total}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">High Risk Found</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  analyses.filter(a => a.risk_score >= RISK_THRESHOLDS.HIGH).length
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Average Risk</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : analyses.length > 0 ? (
+                  (analyses.reduce((sum, a) => sum + a.risk_score, 0) / analyses.length).toFixed(1)
+                ) : (
+                  '0.0'
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Analysis Table */}
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Showing {analyses.length} result{analyses.length !== 1 ? 's' : ''}
-                {Object.keys(filters).length > 0 && ' with active filters'}
-              </span>
-              <div className="flex items-center space-x-4">
-                <span>
-                  Page {pagination.page} of {Math.ceil(pagination.page)}
-                </span>
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm text-muted-foreground">Show:</label>
-                  <select
-                    value={pagination.perPage}
-                    onChange={(e) => setPagination(prev => ({ 
-                      ...prev, 
-                      perPage: parseInt(e.target.value),
-                      page: 1 
-                    }))}
-                    className="text-sm border-input rounded-md"
+          <CardHeader>
+            <CardTitle>Analysis Results</CardTitle>
+            <CardDescription>
+              {pagination.total > 0 ? (
+                `Showing ${((pagination.page - 1) * pagination.size) + 1}-${Math.min(pagination.page * pagination.size, pagination.total)} of ${pagination.total} results`
+              ) : (
+                'No analyses found'
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Analysis ID</TableHead>
+                    <TableHead>Risk Score</TableHead>
+                    <TableHead>Risk Level</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Processing Time</TableHead>
+                    <TableHead className="w-[100px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    [...Array(5)].map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : analyses.length > 0 ? (
+                    analyses.map((analysis) => (
+                      <TableRow key={analysis.analysis_id}>
+                        <TableCell className="font-medium">
+                          {formatDate(analysis.created_at)}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          #{analysis.analysis_id.slice(-8)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{analysis.risk_score}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getRiskBadgeVariant(analysis.risk_score)}>
+                            {getRiskLevel(analysis.risk_score)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(analysis.status)}>
+                            {analysis.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {analysis.processing_time ? `${analysis.processing_time.toFixed(1)}s` : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Link href={`${ROUTES.ANALYSIS}/${analysis.analysis_id}`}>
+                              <Button variant="ghost" size="sm">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDownloadPDF(analysis.analysis_id)}
+                              disabled={isGenerating}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <div className="flex flex-col items-center space-y-4">
+                          <FileText className="h-12 w-12 text-gray-400" />
+                          <div>
+                            <p className="text-lg font-medium text-gray-900">No analyses found</p>
+                            <p className="text-gray-500">
+                              {Object.keys(filters).length > 0 
+                                ? 'Try adjusting your filters or start a new analysis'
+                                : 'Start your first check analysis'
+                              }
+                            </p>
+                          </div>
+                          <Link href={ROUTES.UPLOAD}>
+                            <Button>Start New Analysis</Button>
+                          </Link>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="flex items-center justify-between space-x-2 py-4">
+                <div className="text-sm text-muted-foreground">
+                  Page {pagination.page} of {pagination.pages}
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page <= 1}
                   >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page >= pagination.pages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
-      )}
+      </div>
     </div>
   );
 }

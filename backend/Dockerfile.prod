@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     curl \
     postgresql-client \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
