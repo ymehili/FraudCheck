@@ -7,6 +7,8 @@ a 0-100 risk score with detailed breakdown and recommendations.
 """
 
 import logging
+import json
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -51,34 +53,64 @@ class RiskScoreCalculator:
     - Configurable thresholds
     """
     
-    def __init__(self, category_weights: Optional[Dict[str, float]] = None):
+    def __init__(self, category_weights: Optional[Dict[str, float]] = None, config_path: Optional[str] = None):
         """
         Initialize risk score calculator.
         
         Args:
             category_weights: Custom category weights (forensics, ocr, rules)
+            config_path: Path to scoring configuration JSON file
         """
-        # Default category weights based on PRP requirements
-        self.category_weights = category_weights or {
-            'forensics': 0.4,  # 40% weight for forensics analysis
-            'ocr': 0.3,        # 30% weight for OCR analysis
-            'rules': 0.3       # 30% weight for rule violations
-        }
+        # Load configuration from file
+        self.config = self._load_config(config_path)
+        
+        # Use provided weights or default from config
+        self.category_weights = category_weights or self.config['category_weights']
         
         # Risk level thresholds (0-100 scale)
         self.risk_thresholds = {
-            RiskLevel.LOW: 30,
-            RiskLevel.MEDIUM: 60,
-            RiskLevel.HIGH: 80,
-            RiskLevel.CRITICAL: 90
+            RiskLevel.LOW: self.config['risk_thresholds']['LOW'],
+            RiskLevel.MEDIUM: self.config['risk_thresholds']['MEDIUM'],
+            RiskLevel.HIGH: self.config['risk_thresholds']['HIGH'],
+            RiskLevel.CRITICAL: self.config['risk_thresholds']['CRITICAL']
         }
         
         # Confidence calculation parameters
-        self.confidence_factors = {
-            'forensics_confidence': 0.4,
-            'ocr_confidence': 0.3,
-            'rules_confidence': 0.3
-        }
+        self.confidence_factors = self.config['confidence_factors']
+    
+    def _load_config(self, config_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Load scoring configuration from JSON file.
+        
+        Args:
+            config_path: Path to configuration file. If None, uses default path.
+            
+        Returns:
+            Dictionary containing configuration parameters
+            
+        Raises:
+            RiskScoringError: If configuration file cannot be loaded
+        """
+        if config_path is None:
+            # Default config path relative to this file
+            current_dir = Path(__file__).parent
+            config_path = current_dir.parent / "config" / "scoring_config.json"
+        
+        try:
+            config_path = Path(config_path)
+            if not config_path.exists():
+                raise FileNotFoundError(f"Configuration file not found: {config_path}")
+            
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            logger.debug(f"Loaded scoring configuration from {config_path}")
+            return config
+            
+        except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+            error_msg = f"Failed to load scoring configuration from {config_path}: {str(e)}"
+            logger.error(error_msg)
+            raise RiskScoringError(error_msg)
     
     def calculate_risk_score(self, forensics_result: ForensicsResult, 
                            ocr_result: OCRResult, 
@@ -152,121 +184,120 @@ class RiskScoreCalculator:
         Calculate forensics risk score (0-100).
         
         Lower forensics scores indicate higher risk.
+        
+        Raises:
+            RiskScoringError: If forensics score calculation fails
         """
-        try:
-            # Edge score component (lower is riskier)
-            edge_risk = max(0, (1.0 - forensics_result.edge_score) * 100)
-            
-            # Compression artifacts (higher is riskier)
-            compression_risk = forensics_result.compression_score * 100
-            
-            # Font analysis (lower is riskier)
-            font_risk = max(0, (1.0 - forensics_result.font_score) * 100)
-            
-            # Overall forensics score (lower is riskier)
-            overall_risk = max(0, (1.0 - forensics_result.overall_score) * 100)
-            
-            # Weighted average of forensics components
-            forensics_score = int(
-                edge_risk * 0.25 +
-                compression_risk * 0.25 +
-                font_risk * 0.25 +
-                overall_risk * 0.25
-            )
-            
-            # Boost score for detected anomalies
-            anomaly_boost = len(forensics_result.detected_anomalies) * 5
-            forensics_score = min(100, forensics_score + anomaly_boost)
-            
-            logger.debug(f"Forensics score calculated: {forensics_score}")
-            return forensics_score
-            
-        except Exception as e:
-            logger.error(f"Forensics score calculation failed: {str(e)}")
-            return 50  # Default moderate risk
+        # Edge score component (lower is riskier)
+        edge_risk = max(0, (1.0 - forensics_result.edge_score) * 100)
+        
+        # Compression artifacts (higher is riskier)
+        compression_risk = forensics_result.compression_score * 100
+        
+        # Font analysis (lower is riskier)
+        font_risk = max(0, (1.0 - forensics_result.font_score) * 100)
+        
+        # Overall forensics score (lower is riskier)
+        overall_risk = max(0, (1.0 - forensics_result.overall_score) * 100)
+        
+        # Weighted average of forensics components
+        weights = self.config['forensics_weights']
+        forensics_score = int(
+            edge_risk * weights['edge_risk'] +
+            compression_risk * weights['compression_risk'] +
+            font_risk * weights['font_risk'] +
+            overall_risk * weights['overall_risk']
+        )
+        
+        # Boost score for detected anomalies
+        anomaly_boost = len(forensics_result.detected_anomalies) * weights['anomaly_boost_per_item']
+        forensics_score = min(100, forensics_score + anomaly_boost)
+        
+        logger.debug(f"Forensics score calculated: {forensics_score}")
+        return forensics_score
     
     def _calculate_ocr_score(self, ocr_result: OCRResult) -> int:
         """
         Calculate OCR risk score (0-100).
         
         Lower confidence and missing fields indicate higher risk.
+        
+        Raises:
+            RiskScoringError: If OCR score calculation fails
         """
-        try:
-            # Base score from extraction confidence (lower confidence = higher risk)
-            confidence_risk = max(0, (1.0 - ocr_result.extraction_confidence) * 100)
-            
-            # Missing critical fields penalty
-            critical_fields = ['payee', 'amount', 'date']
-            missing_fields = []
-            
-            for field in critical_fields:
-                field_value = getattr(ocr_result, field, None)
-                if field_value is None or field_value == "":
-                    missing_fields.append(field)
-            
-            missing_fields_penalty = len(missing_fields) * 25  # 25 points per missing field
-            
-            # Field confidence analysis
-            field_confidence_risk = 0
-            if ocr_result.field_confidences:
-                avg_field_confidence = sum(ocr_result.field_confidences.values()) / len(ocr_result.field_confidences)
-                field_confidence_risk = int(max(0, (1.0 - avg_field_confidence) * 30))
-            
-            # Signature detection (missing signature increases risk)
-            signature_risk = 0 if ocr_result.signature_detected else 20
-            
-            ocr_score = min(100, int(
-                confidence_risk * 0.4 +
-                missing_fields_penalty +
-                field_confidence_risk +
-                signature_risk
-            ))
-            
-            logger.debug(f"OCR score calculated: {ocr_score}")
-            return ocr_score
-            
-        except Exception as e:
-            logger.error(f"OCR score calculation failed: {str(e)}")
-            return 50  # Default moderate risk
+        # Base score from extraction confidence (lower confidence = higher risk)
+        confidence_risk = max(0, (1.0 - ocr_result.extraction_confidence) * 100)
+        
+        # Missing critical fields penalty
+        ocr_config = self.config['ocr_scoring']
+        critical_fields = ocr_config['critical_fields']
+        missing_fields = []
+        
+        for field in critical_fields:
+            field_value = getattr(ocr_result, field, None)
+            if field_value is None or field_value == "":
+                missing_fields.append(field)
+        
+        missing_fields_penalty = len(missing_fields) * ocr_config['missing_field_penalty']
+        
+        # Field confidence analysis
+        field_confidence_risk = 0
+        if ocr_result.field_confidences:
+            avg_field_confidence = sum(ocr_result.field_confidences.values()) / len(ocr_result.field_confidences)
+            field_confidence_risk = int(max(0, (1.0 - avg_field_confidence) * ocr_config['field_confidence_risk_multiplier']))
+        
+        # Signature detection (missing signature increases risk)
+        signature_risk = 0 if ocr_result.signature_detected else ocr_config['signature_missing_penalty']
+        
+        ocr_score = min(100, int(
+            confidence_risk * ocr_config['confidence_weight'] +
+            missing_fields_penalty +
+            field_confidence_risk +
+            signature_risk
+        ))
+        
+        logger.debug(f"OCR score calculated: {ocr_score}")
+        return ocr_score
     
     def _calculate_rules_score(self, rule_result: RuleEngineResult) -> int:
         """
         Calculate rules risk score (0-100).
         
         More violations and higher rule scores indicate higher risk.
+        
+        Raises:
+            RiskScoringError: If rules score calculation fails
         """
-        try:
-            # Base score from rule engine risk score
-            base_score = int(rule_result.risk_score * 100)
-            
-            # Violations penalty (each violation adds risk)
-            violations_penalty = len(rule_result.violations) * 10
-            
-            # Rule scores analysis
-            rule_scores_risk = 0
-            if rule_result.rule_scores:
-                high_risk_rules = [score for score in rule_result.rule_scores.values() if score > 0.7]
-                rule_scores_risk = len(high_risk_rules) * 5
-            
-            # Confidence factor adjustment
-            confidence_adjustment = 0
-            if rule_result.confidence_factors:
-                overall_confidence = rule_result.confidence_factors.get('overall', 0.5)
-                confidence_adjustment = int(max(0, (1.0 - overall_confidence) * 20))
-            
-            rules_score = min(100, int(
-                base_score +
-                violations_penalty +
-                rule_scores_risk +
-                confidence_adjustment
-            ))
-            
-            logger.debug(f"Rules score calculated: {rules_score}")
-            return rules_score
-            
-        except Exception as e:
-            logger.error(f"Rules score calculation failed: {str(e)}")
-            return 50  # Default moderate risk
+        # Base score from rule engine risk score
+        base_score = int(rule_result.risk_score * 100)
+        
+        rules_config = self.config['rules_scoring']
+        
+        # Violations penalty (each violation adds risk)
+        violations_penalty = len(rule_result.violations) * rules_config['violations_penalty_per_item']
+        
+        # Rule scores analysis
+        rule_scores_risk = 0
+        if rule_result.rule_scores:
+            high_risk_rules = [score for score in rule_result.rule_scores.values() 
+                              if score > rules_config['high_risk_rule_threshold']]
+            rule_scores_risk = len(high_risk_rules) * rules_config['high_risk_rule_penalty']
+        
+        # Confidence factor adjustment
+        confidence_adjustment = 0
+        if rule_result.confidence_factors:
+            overall_confidence = rule_result.confidence_factors.get('overall', rules_config['default_confidence'])
+            confidence_adjustment = int(max(0, (1.0 - overall_confidence) * rules_config['confidence_adjustment_multiplier']))
+        
+        rules_score = min(100, int(
+            base_score +
+            violations_penalty +
+            rule_scores_risk +
+            confidence_adjustment
+        ))
+        
+        logger.debug(f"Rules score calculated: {rules_score}")
+        return rules_score
     
     def _calculate_overall_score(self, forensics_score: int, 
                                ocr_score: int, rules_score: int) -> int:
@@ -356,40 +387,21 @@ class RiskScoreCalculator:
         """Generate specific recommendations based on risk assessment."""
         recommendations = []
         
-        # Base recommendations by risk level
-        if risk_level == RiskLevel.CRITICAL:
-            recommendations.extend([
-                "CRITICAL: DO NOT PROCESS - Manual review required",
-                "Potential fraud detected - Contact security team immediately",
-                "Full forensic investigation recommended"
-            ])
-        elif risk_level == RiskLevel.HIGH:
-            recommendations.extend([
-                "HIGH RISK: Manual review required before processing",
-                "Verify with additional documentation",
-                "Consider enhanced authentication procedures"
-            ])
-        elif risk_level == RiskLevel.MEDIUM:
-            recommendations.extend([
-                "MEDIUM RISK: Additional verification recommended",
-                "Review flagged areas manually",
-                "Consider secondary verification"
-            ])
-        else:
-            recommendations.extend([
-                "LOW RISK: Standard processing acceptable",
-                "Check appears legitimate based on analysis"
-            ])
+        # Base recommendations by risk level from config
+        risk_level_templates = self.config['recommendation_templates']
+        recommendations.extend(risk_level_templates[risk_level.value])
         
         # Specific recommendations based on analysis results
-        if forensics_result.edge_score < 0.3:
-            recommendations.append("Investigate edge quality anomalies")
-        if forensics_result.compression_score > 0.7:
-            recommendations.append("Review compression artifacts for tampering")
-        if ocr_result.extraction_confidence < 0.5:
-            recommendations.append("Manually verify OCR extracted fields")
+        specific_config = self.config['specific_recommendations']
+        
+        if forensics_result.edge_score < specific_config['low_edge_score_threshold']:
+            recommendations.append(specific_config['low_edge_recommendation'])
+        if forensics_result.compression_score > specific_config['high_compression_threshold']:
+            recommendations.append(specific_config['high_compression_recommendation'])
+        if ocr_result.extraction_confidence < specific_config['low_ocr_confidence_threshold']:
+            recommendations.append(specific_config['low_ocr_recommendation'])
         if not ocr_result.signature_detected:
-            recommendations.append("Verify signature presence and authenticity")
+            recommendations.append(specific_config['no_signature_recommendation'])
         
         # Rule-specific recommendations
         recommendations.extend(rule_result.recommendations)
@@ -451,7 +463,8 @@ class RiskScoringError(Exception):
 def calculate_risk_score(forensics_result: ForensicsResult, 
                         ocr_result: OCRResult, 
                         rule_result: RuleEngineResult,
-                        category_weights: Optional[Dict[str, float]] = None) -> RiskScoreData:
+                        category_weights: Optional[Dict[str, float]] = None,
+                        config_path: Optional[str] = None) -> RiskScoreData:
     """
     Convenience function to calculate risk score.
     
@@ -460,11 +473,12 @@ def calculate_risk_score(forensics_result: ForensicsResult,
         ocr_result: OCR extraction results
         rule_result: Rule engine results
         category_weights: Optional custom weights
+        config_path: Optional path to configuration file
         
     Returns:
         RiskScoreData with comprehensive risk assessment
     """
-    calculator = RiskScoreCalculator(category_weights)
+    calculator = RiskScoreCalculator(category_weights, config_path)
     return calculator.calculate_risk_score(forensics_result, ocr_result, rule_result)
 
 
