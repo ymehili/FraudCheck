@@ -103,8 +103,8 @@ services:
       - API_BASE_URL=http://backend:8000
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_c2hpbmluZy10b2FkLTg1LmNsZXJrLmFjY291bnRzLmRldiQ
-      - CLERK_SECRET_KEY=REDACTED_CLERK_KEY_2
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_YmlnLWZseS0xNi5jbGVyay5hY2NvdW50cy5kZXYk
+      - CLERK_SECRET_KEY=REDACTED_CLERK_KEY_1
       - NODE_ENV=development
     volumes:
       - ./frontend:/app
