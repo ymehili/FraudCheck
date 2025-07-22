@@ -322,8 +322,8 @@ export default function DashboardPage() {
                     <div key={analysis.analysis_id} className="flex items-center space-x-3">
                       <div className={cn(
                         "w-2 h-2 rounded-full",
-                        (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "bg-red-500" :
-                        (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "bg-yellow-500" :
+                        (analysis.risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "bg-red-500" :
+                        (analysis.risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "bg-yellow-500" :
                         "bg-green-500"
                       )} />
                       <div className="flex-1 min-w-0">
@@ -331,7 +331,7 @@ export default function DashboardPage() {
                           Analysis #{analysis.analysis_id.slice(-8)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Risk Score: {formatRiskScore(analysis.overall_risk_score)} • {new Date(analysis.created_at).toLocaleDateString()}
+                          Risk Score: {formatRiskScore(analysis.risk_score)} • {new Date(analysis.created_at).toLocaleDateString()}
                         </p>
                       </div>
                       <Link href={`${ROUTES.ANALYSIS}/${analysis.analysis_id}`}>

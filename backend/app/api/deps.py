@@ -33,7 +33,7 @@ async def get_current_user(
     
     try:
         user_data = await verify_clerk_token(token)
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

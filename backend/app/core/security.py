@@ -46,8 +46,17 @@ async def get_clerk_jwks() -> Dict[str, Any]:
         # Format: pk_test_<base64_instance_info>
         instance_part = publishable_key.split('_', 2)[-1]
         
-        # Clerk JWKS URL format
-        jwks_url = f"https://api.clerk.com/v1/jwks"
+        # Clerk JWKS URL format - extract from publishable key
+        import base64
+        try:
+            # Decode the base64 part to get instance info  
+            decoded = base64.b64decode(instance_part + '==').decode('utf-8')
+            # Remove trailing $ if present
+            domain = decoded.rstrip('$')
+            jwks_url = f"https://{domain}/.well-known/jwks.json"
+        except Exception as decode_error:
+            # Fallback to the standard format
+            jwks_url = f"https://api.clerk.com/v1/jwks"
         
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_url)
@@ -99,9 +108,10 @@ async def verify_clerk_token(token: str) -> Dict[str, Any]:
                 break
         
         if not rsa_key:
+            available_kids = [key.get("kid") for key in jwks.get("keys", [])]
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unable to find matching key in JWKS",
+                detail=f"Unable to find matching key in JWKS. Token kid: {kid}, Available: {available_kids}",
             )
         
         # Verify and decode the token
