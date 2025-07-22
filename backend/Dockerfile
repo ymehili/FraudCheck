@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     postgresql-client \
     poppler-utils \
+    libmagic1 \
+    libmagic-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

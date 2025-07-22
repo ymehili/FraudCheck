@@ -355,7 +355,7 @@ class FileSecurityValidator:
 security_validator = FileSecurityValidator()
 
 
-def validate_upload_security(file: UploadFile) -> Dict[str, Any]:
+async def validate_upload_security(file: UploadFile) -> Dict[str, Any]:
     """
     Validate uploaded file for security threats.
     
