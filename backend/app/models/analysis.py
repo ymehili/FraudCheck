@@ -8,6 +8,7 @@ from ..database import Base
 
 if TYPE_CHECKING:
     from .file import FileRecord
+    from .search_index import SearchIndex
 
 
 class AnalysisResult(Base):
@@ -38,3 +39,4 @@ class AnalysisResult(Base):
     
     # Relationships
     file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="analysis_results")
+    search_index: Mapped["SearchIndex"] = relationship("SearchIndex", back_populates="analysis", uselist=False)

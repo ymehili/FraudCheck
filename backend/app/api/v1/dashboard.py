@@ -11,7 +11,7 @@ This module provides comprehensive dashboard functionality including:
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, asc, and_, or_
+from sqlalchemy import select, func, desc, asc, and_, or_, case
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -21,10 +21,10 @@ from ...database import get_db
 from ...models.user import User
 from ...models.file import FileRecord
 from ...models.analysis import AnalysisResult
+from ...models.search_index import SearchIndex
 from ...schemas.dashboard import (
     DashboardResponse,
     DashboardStats,
-    AnalysisHistoryResponse,
     EnhancedAnalysisResult,
     DashboardFilter,
     PaginationParams,
@@ -41,9 +41,128 @@ from ...schemas.dashboard import (
     DashboardSearchResponse
 )
 from ..deps import get_current_user
+from ...utils.cache import cached
 
 router = APIRouter(tags=["dashboard"])
 logger = logging.getLogger(__name__)
+
+
+@cached(ttl_seconds=180)  # Cache for 3 minutes
+async def _get_dashboard_stats_cached(user_id: str, db: AsyncSession) -> DashboardStats:
+    """Cached implementation of dashboard stats retrieval."""
+    try:
+        # Calculate time boundaries once
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today_start - timedelta(days=today_start.weekday())
+        month_start = today_start.replace(day=1)
+        
+        # Single optimized query for all statistics
+        stats_query = (
+            select(
+                func.count(AnalysisResult.id).label('total_analyses'),
+                func.sum(
+                    case(
+                        (AnalysisResult.analysis_timestamp >= today_start, 1),
+                        else_=0
+                    )
+                ).label('analyses_today'),
+                func.sum(
+                    case(
+                        (AnalysisResult.analysis_timestamp >= week_start, 1),
+                        else_=0
+                    )
+                ).label('analyses_this_week'),
+                func.sum(
+                    case(
+                        (AnalysisResult.analysis_timestamp >= month_start, 1),
+                        else_=0
+                    )
+                ).label('analyses_this_month'),
+                func.avg(AnalysisResult.overall_risk_score).label('avg_risk_score'),
+                func.avg(AnalysisResult.ocr_confidence).label('avg_confidence'),
+                # Risk distribution in single query
+                func.sum(
+                    case(
+                        (AnalysisResult.overall_risk_score < 30, 1),
+                        else_=0
+                    )
+                ).label('risk_low'),
+                func.sum(
+                    case(
+                        (and_(AnalysisResult.overall_risk_score >= 30, AnalysisResult.overall_risk_score < 60), 1),
+                        else_=0
+                    )
+                ).label('risk_medium'),
+                func.sum(
+                    case(
+                        (and_(AnalysisResult.overall_risk_score >= 60, AnalysisResult.overall_risk_score < 80), 1),
+                        else_=0
+                    )
+                ).label('risk_high'),
+                func.sum(
+                    case(
+                        (AnalysisResult.overall_risk_score >= 80, 1),
+                        else_=0
+                    )
+                ).label('risk_critical')
+            )
+            .select_from(AnalysisResult)
+            .join(FileRecord)
+            .where(FileRecord.user_id == user_id)
+        )
+        
+        stats_result = await db.execute(stats_query)
+        stats_row = stats_result.first()
+        
+        if stats_row:
+            total_analyses = stats_row.total_analyses or 0
+            analyses_today = stats_row.analyses_today or 0
+            analyses_this_week = stats_row.analyses_this_week or 0
+            analyses_this_month = stats_row.analyses_this_month or 0
+            avg_risk_score = stats_row.avg_risk_score
+            avg_confidence = stats_row.avg_confidence
+            
+            # Build risk distribution from single query
+            risk_distribution = RiskDistribution(
+                low=stats_row.risk_low or 0,
+                medium=stats_row.risk_medium or 0,
+                high=stats_row.risk_high or 0,
+                critical=stats_row.risk_critical or 0,
+                total=total_analyses
+            )
+        else:
+            total_analyses = analyses_today = analyses_this_week = analyses_this_month = 0
+            avg_risk_score = avg_confidence = None
+            risk_distribution = RiskDistribution(low=0, medium=0, high=0, critical=0, total=0)
+        
+        # Get most common violations
+        most_common_violations = await _get_most_common_violations(db, user_id)
+        
+        # Get trend data for the last 30 days
+        trend_data = await _get_trend_data(db, user_id, days=30)
+        
+        # Get processing statistics
+        processing_stats = await _get_processing_stats(db, user_id)
+        
+        return DashboardStats(
+            total_analyses=total_analyses,
+            analyses_today=analyses_today,
+            analyses_this_week=analyses_this_week,
+            analyses_this_month=analyses_this_month,
+            risk_distribution=risk_distribution,
+            average_risk_score=float(avg_risk_score) if avg_risk_score else 0.0,
+            average_confidence=float(avg_confidence) if avg_confidence else 0.0,
+            most_common_violations=most_common_violations,
+            trend_data=trend_data,
+            processing_stats=processing_stats
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get dashboard stats: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve dashboard statistics"
+        )
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -60,91 +179,7 @@ async def get_dashboard_stats(
     - Trend data
     - Processing statistics
     """
-    try:
-        # Get total analyses count
-        total_analyses = await db.scalar(
-            select(func.count(AnalysisResult.id))
-            .where(AnalysisResult.file.has(FileRecord.user_id == current_user.id))
-        )
-        
-        # Get today's analyses
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        analyses_today = await db.scalar(
-            select(func.count(AnalysisResult.id))
-            .where(
-                and_(
-                    AnalysisResult.file.has(FileRecord.user_id == current_user.id),
-                    AnalysisResult.analysis_timestamp >= today_start
-                )
-            )
-        )
-        
-        # Get this week's analyses
-        week_start = today_start - timedelta(days=today_start.weekday())
-        analyses_this_week = await db.scalar(
-            select(func.count(AnalysisResult.id))
-            .where(
-                and_(
-                    AnalysisResult.file.has(FileRecord.user_id == current_user.id),
-                    AnalysisResult.analysis_timestamp >= week_start
-                )
-            )
-        )
-        
-        # Get this month's analyses
-        month_start = today_start.replace(day=1)
-        analyses_this_month = await db.scalar(
-            select(func.count(AnalysisResult.id))
-            .where(
-                and_(
-                    AnalysisResult.file.has(FileRecord.user_id == current_user.id),
-                    AnalysisResult.analysis_timestamp >= month_start
-                )
-            )
-        )
-        
-        # Get risk distribution
-        risk_distribution = await _get_risk_distribution(db, current_user.id)
-        
-        # Get average risk score and confidence
-        avg_stats = await db.execute(
-            select(
-                func.avg(AnalysisResult.overall_risk_score),
-                func.avg(AnalysisResult.ocr_confidence)
-            )
-            .where(AnalysisResult.file.has(FileRecord.user_id == current_user.id))
-        )
-        result = avg_stats.first()
-        avg_risk_score, avg_confidence = result if result else (None, None)
-        
-        # Get most common violations
-        most_common_violations = await _get_most_common_violations(db, current_user.id)
-        
-        # Get trend data for the last 30 days
-        trend_data = await _get_trend_data(db, current_user.id, days=30)
-        
-        # Get processing statistics
-        processing_stats = await _get_processing_stats(db, current_user.id)
-        
-        return DashboardStats(
-            total_analyses=total_analyses or 0,
-            analyses_today=analyses_today or 0,
-            analyses_this_week=analyses_this_week or 0,
-            analyses_this_month=analyses_this_month or 0,
-            risk_distribution=risk_distribution,
-            average_risk_score=float(avg_risk_score) if avg_risk_score else 0.0,
-            average_confidence=float(avg_confidence) if avg_confidence else 0.0,
-            most_common_violations=most_common_violations,
-            trend_data=trend_data,
-            processing_stats=processing_stats
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to get dashboard stats: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to retrieve dashboard statistics: {str(e)}"
-        )
+    return await _get_dashboard_stats_cached(current_user.id, db)
 
 
 @router.get("/history")
@@ -168,13 +203,6 @@ async def get_analysis_history(
     - Status
     """
     try:
-        # Build base query
-        base_query = (
-            select(AnalysisResult)
-            .join(FileRecord)
-            .where(FileRecord.user_id == current_user.id)
-            .options(joinedload(AnalysisResult.file))
-        )
         
         # Apply simple filters
         query_conditions = [FileRecord.user_id == current_user.id]
@@ -216,6 +244,7 @@ async def get_analysis_history(
         # Get total count for pagination
         count_query = (
             select(func.count(AnalysisResult.id))
+            .select_from(AnalysisResult)
             .join(FileRecord)
             .where(and_(*query_conditions))
         )
@@ -252,25 +281,6 @@ async def get_analysis_history(
         # Calculate pagination info
         total_pages = ((total_count or 0) + size - 1) // size
         
-        pagination_info = {
-            'page': page,
-            'size': size,
-            'total': total_count or 0,
-            'pages': total_pages,
-            'has_next': page < total_pages,
-            'has_previous': page > 1
-        }
-        
-        # Create a simple filters object for response compatibility
-        simple_filters = DashboardFilter()
-        
-        # Get summary statistics for filtered results
-        summary = {
-            'total_filtered': total_count or 0,
-            'average_risk_score': sum(a.overall_risk_score for a in analyses) / len(analyses) if analyses else 0.0,
-            'average_confidence': sum(a.ocr_confidence for a in analyses) / len(analyses) if analyses else 0.0
-        }
-        
         # Return a paginated response that matches frontend expectations
         return {
             'items': history_items,
@@ -284,7 +294,7 @@ async def get_analysis_history(
         logger.error(f"Failed to get analysis history: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to retrieve analysis history: {str(e)}"
+            detail="Failed to retrieve analysis history"
         )
 
 
@@ -350,7 +360,7 @@ async def get_filter_options(
         logger.error(f"Failed to get filter options: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to retrieve filter options: {str(e)}"
+            detail="Failed to retrieve filter options"
         )
 
 
@@ -372,30 +382,34 @@ async def search_analyses(
     try:
         start_time = datetime.utcnow()
         
-        # Build search query
+        # Build optimized search query using search index
         search_query = (
             select(AnalysisResult)
             .join(FileRecord)
+            .join(SearchIndex, AnalysisResult.id == SearchIndex.analysis_id)
             .where(FileRecord.user_id == current_user.id)
             .options(joinedload(AnalysisResult.file))
         )
         
-        # Apply text search
+        # Apply text search using indexed columns
         search_conditions = []
         query_term = f"%{search_request.query}%"
         
         if 'filename' in search_request.search_fields:
-            search_conditions.append(FileRecord.filename.ilike(query_term))
+            search_conditions.append(SearchIndex.filename.ilike(query_term))
         
         if 'violations' in search_request.search_fields:
-            search_conditions.append(
-                func.json_extract(AnalysisResult.rule_violations, '$.violations').ilike(query_term)
-            )
+            search_conditions.append(SearchIndex.violations_text.ilike(query_term))
         
         if 'risk_factors' in search_request.search_fields:
-            search_conditions.append(
-                func.json_extract(AnalysisResult.rule_violations, '$.risk_factors').ilike(query_term)
-            )
+            search_conditions.append(SearchIndex.risk_factors_text.ilike(query_term))
+            
+        if 'ocr_text' in search_request.search_fields:
+            search_conditions.append(SearchIndex.ocr_text.ilike(query_term))
+        
+        # Fallback to combined search if no specific fields or for comprehensive search
+        if not search_conditions or len(search_request.search_fields) > 2:
+            search_conditions.append(SearchIndex.search_text.ilike(query_term))
         
         if search_conditions:
             search_query = search_query.where(or_(*search_conditions))
@@ -462,7 +476,7 @@ async def search_analyses(
         logger.error(f"Search failed: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Search failed: {str(e)}"
+            detail="Search failed"
         )
 
 
@@ -517,36 +531,55 @@ async def get_dashboard(
         logger.error(f"Failed to get dashboard: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to retrieve dashboard: {str(e)}"
+            detail="Failed to retrieve dashboard"
         )
 
 
 # Helper functions
 async def _get_risk_distribution(db: AsyncSession, user_id: str) -> RiskDistribution:
-    """Calculate risk distribution for user's analyses."""
+    """Calculate risk distribution for user's analyses using optimized single query."""
     try:
-        # Get all analyses for the user
-        analyses_query = (
-            select(AnalysisResult.overall_risk_score)
-            .where(AnalysisResult.file.has(FileRecord.user_id == user_id))
+        # Single optimized query using conditional aggregation
+        risk_query = (
+            select(
+                func.count(AnalysisResult.id).label('total'),
+                func.sum(
+                    case((AnalysisResult.overall_risk_score < 30, 1), else_=0)
+                ).label('low'),
+                func.sum(
+                    case(
+                        (and_(AnalysisResult.overall_risk_score >= 30, AnalysisResult.overall_risk_score < 60), 1),
+                        else_=0
+                    )
+                ).label('medium'),
+                func.sum(
+                    case(
+                        (and_(AnalysisResult.overall_risk_score >= 60, AnalysisResult.overall_risk_score < 80), 1),
+                        else_=0
+                    )
+                ).label('high'),
+                func.sum(
+                    case((AnalysisResult.overall_risk_score >= 80, 1), else_=0)
+                ).label('critical')
+            )
+            .select_from(AnalysisResult)
+            .join(FileRecord)
+            .where(FileRecord.user_id == user_id)
         )
         
-        result = await db.execute(analyses_query)
-        risk_scores = [row[0] for row in result.fetchall()]
+        result = await db.execute(risk_query)
+        row = result.first()
         
-        # Categorize by risk levels
-        low = sum(1 for score in risk_scores if score < 30)
-        medium = sum(1 for score in risk_scores if 30 <= score < 60)
-        high = sum(1 for score in risk_scores if 60 <= score < 80)
-        critical = sum(1 for score in risk_scores if score >= 80)
-        
-        return RiskDistribution(
-            low=low,
-            medium=medium,
-            high=high,
-            critical=critical,
-            total=len(risk_scores)
-        )
+        if row:
+            return RiskDistribution(
+                low=row.low or 0,
+                medium=row.medium or 0,
+                high=row.high or 0,
+                critical=row.critical or 0,
+                total=row.total or 0
+            )
+        else:
+            return RiskDistribution(low=0, medium=0, high=0, critical=0, total=0)
         
     except Exception as e:
         logger.error(f"Failed to calculate risk distribution: {str(e)}")
