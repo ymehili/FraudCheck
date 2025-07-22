@@ -25,6 +25,7 @@ from ...schemas.analysis import (
 from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
 from ...core.rule_engine import load_rule_engine
+from ...core.scoring import RiskScoreCalculator, RiskScoreData
 from ...core.s3 import s3_service
 from ...utils.file_utils import (
     validate_file_for_analysis,
@@ -45,11 +46,13 @@ class ComprehensiveAnalysisResult:
     forensics_result: Optional[ForensicsResult] = None
     ocr_result: Optional[OCRResult] = None
     rule_result: Optional[RuleEngineResult] = None
+    risk_score_data: Optional[RiskScoreData] = None
 
 
 # Initialize engines
 forensics_engine = ForensicsEngine()
 rule_engine = load_rule_engine()
+risk_calculator = RiskScoreCalculator()
 
 
 async def get_ocr_engine() -> OCREngine:
@@ -433,9 +436,9 @@ async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> C
             
             for i, (task_name, _) in enumerate(tasks):
                 if task_name == "forensics":
-                    forensics_result = task_results[i]
+                    forensics_result = task_results[i]  # type: ignore
                 elif task_name == "ocr":
-                    ocr_result = task_results[i]
+                    ocr_result = task_results[i]  # type: ignore
         
         # Run rule engine if we have results
         if "rules" in analysis_types and forensics_result and ocr_result:
@@ -444,10 +447,25 @@ async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> C
                 ocr_result
             )
         
+        # Calculate enhanced risk score if we have all components
+        risk_score_data = None
+        if forensics_result and ocr_result and rule_result:
+            try:
+                risk_score_data = risk_calculator.calculate_risk_score(
+                    forensics_result,
+                    ocr_result,
+                    rule_result
+                )
+                logger.info(f"Risk score calculated: {risk_score_data.overall_score} ({risk_score_data.risk_level.value})")
+            except Exception as e:
+                logger.error(f"Risk score calculation failed: {str(e)}")
+                # Continue without enhanced scoring if it fails
+        
         return ComprehensiveAnalysisResult(
             forensics_result=forensics_result,
             ocr_result=ocr_result,
-            rule_result=rule_result
+            rule_result=rule_result,
+            risk_score_data=risk_score_data
         )
         
     except Exception as e:
@@ -466,6 +484,7 @@ async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAn
         forensics_result = analysis_result.forensics_result
         ocr_result = analysis_result.ocr_result
         rule_result = analysis_result.rule_result
+        risk_score_data = analysis_result.risk_score_data
         
         # Create analysis record with numpy type conversion
         analysis_record = AnalysisResult(
@@ -493,14 +512,29 @@ async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAn
                 "field_confidences": ocr_result.field_confidences if ocr_result else {}
             }),
             
-            # Rule engine results (convert numpy types)
-            overall_risk_score=_convert_numpy_types(rule_result.risk_score if rule_result else 0.0),
+            # Rule engine results (convert numpy types) - use enhanced risk score if available
+            overall_risk_score=_convert_numpy_types(
+                float(risk_score_data.overall_score) if risk_score_data else 
+                (rule_result.risk_score if rule_result else 0.0)
+            ),
             rule_violations=_convert_numpy_types({
                 "violations": rule_result.violations if rule_result else [],
                 "passed_rules": rule_result.passed_rules if rule_result else [],
-                "rule_scores": rule_result.rule_scores if rule_result else {}
+                "rule_scores": rule_result.rule_scores if rule_result else {},
+                # Add enhanced scoring data if available
+                "enhanced_scoring": {
+                    "category_scores": risk_score_data.category_scores,
+                    "risk_factors": risk_score_data.risk_factors,
+                    "risk_level": risk_score_data.risk_level.value,
+                    "detailed_breakdown": risk_score_data.detailed_breakdown,
+                    "recommendations": risk_score_data.recommendations,
+                    "timestamp": risk_score_data.timestamp.isoformat()
+                } if risk_score_data else None
             }),
-            confidence_factors=_convert_numpy_types(rule_result.confidence_factors if rule_result else {})
+            confidence_factors=_convert_numpy_types(
+                {"overall": risk_score_data.confidence_level} if risk_score_data else 
+                (rule_result.confidence_factors if rule_result else {})
+            )
         )
         
         db.add(analysis_record)
@@ -552,21 +586,34 @@ async def _format_analysis_response(analysis_record: AnalysisResult) -> Analysis
             field_confidences=extracted_fields.get('field_confidences', {})
         )
         
+        # Check if enhanced scoring data is available
+        enhanced_scoring = rule_violations.get('enhanced_scoring')
+        recommendations = rule_violations.get('recommendations', [])
+        
+        # Use enhanced recommendations if available
+        if enhanced_scoring and enhanced_scoring.get('recommendations'):
+            recommendations = enhanced_scoring['recommendations']
+        
         rule_engine_result = RuleEngineResult(
             risk_score=analysis_record.overall_risk_score or 0.0,
             violations=rule_violations.get('violations', []),
             passed_rules=rule_violations.get('passed_rules', []),
             rule_scores=rule_violations.get('rule_scores', {}),
             confidence_factors=analysis_record.confidence_factors or {},
-            recommendations=rule_violations.get('recommendations', [])
+            recommendations=recommendations
         )
         
-        # Calculate overall confidence
-        overall_confidence = (
-            (analysis_record.ocr_confidence or 0.0) * 0.4 +
-            (analysis_record.forensics_score or 0.0) * 0.3 +
-            (analysis_record.confidence_factors or {}).get('overall', 0.0) * 0.3
-        )
+        # Calculate overall confidence - use enhanced confidence if available
+        if enhanced_scoring:
+            # Use the confidence level from enhanced scoring (already calculated by RiskScoreCalculator)
+            overall_confidence = analysis_record.confidence_factors.get('overall', 0.0)
+        else:
+            # Fall back to legacy confidence calculation
+            overall_confidence = (
+                (analysis_record.ocr_confidence or 0.0) * 0.4 +
+                (analysis_record.forensics_score or 0.0) * 0.3 +
+                (analysis_record.confidence_factors or {}).get('overall', 0.0) * 0.3
+            )
         
         return AnalysisResponse(
             analysis_id=analysis_record.id,
