@@ -168,6 +168,44 @@ class S3Service:
             logger.error(f"Unexpected error generating presigned URL: {e}")
             return None
 
+    async def get_object_metadata(self, s3_key: str) -> Optional[dict]:
+        """Get file metadata from S3 without downloading the file."""
+        try:
+            response = self.s3_client.head_object(
+                Bucket=settings.S3_BUCKET_NAME,
+                Key=s3_key
+            )
+            
+            # Extract useful metadata
+            metadata = {
+                'content_type': response.get('ContentType', ''),
+                'content_length': response.get('ContentLength', 0),
+                'last_modified': response.get('LastModified'),
+                'etag': response.get('ETag', '').strip('"'),
+                's3_metadata': response.get('Metadata', {}),
+                'server_side_encryption': response.get('ServerSideEncryption'),
+            }
+            
+            return metadata
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'NoSuchKey':
+                logger.warning(f"S3 object not found: {s3_key}")
+                return None
+            else:
+                logger.error(f"Failed to get S3 object metadata: {error_code} - {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get file metadata: {error_code}"
+                )
+        except Exception as e:
+            logger.error(f"Unexpected error getting S3 metadata: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to get file metadata"
+            )
+
     async def validate_file(self, file: UploadFile) -> dict:
         """Validate file using comprehensive security checks."""
         from ..utils.security_validation import validate_upload_security, SecurityValidationError

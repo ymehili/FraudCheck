@@ -101,6 +101,31 @@ async def list_files(
         per_page=per_page
     )
 
+def _determine_file_type_from_mime_type(mime_type: str) -> str:
+    """Determine file type from MIME type."""
+    if mime_type.startswith('image/'):
+        return 'image'
+    elif mime_type == 'application/pdf':
+        return 'pdf'
+    else:
+        return 'unknown'
+
+
+def _get_supported_operations(file_type: str, analysis_ready: bool) -> list:
+    """Get supported operations based on file type and analysis readiness."""
+    supported_operations = []
+    
+    if analysis_ready:
+        supported_operations.extend(['analyze', 'download'])
+    
+    if file_type == 'pdf':
+        supported_operations.append('convert_to_images')
+    elif file_type == 'image':
+        supported_operations.extend(['enhance', 'resize', 'crop'])
+    
+    return supported_operations
+
+
 @router.get("/{file_id}/info", response_model=FileInfoResponse)
 async def get_file_info(
     file_id: str,
@@ -123,69 +148,56 @@ async def get_file_info(
         )
     
     try:
-        # Download file temporarily to analyze
-        download_url = await s3_service.generate_presigned_url(file_record.s3_key)
-        if not download_url:
+        # Get S3 metadata without downloading the file
+        s3_metadata = await s3_service.get_object_metadata(file_record.s3_key)
+        if not s3_metadata:
             raise HTTPException(
-                status_code=500,
-                detail="Failed to generate download URL for analysis"
+                status_code=404,
+                detail="File not found in storage"
             )
         
-        import aiohttp
-        import tempfile
-        import aiofiles
-        from ...utils.file_utils import get_file_info
+        # Determine file type from MIME type
+        file_type = _determine_file_type_from_mime_type(file_record.mime_type)
         
-        # Download to temporary file
-        temp_file = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
+        # For basic file info, we can determine analysis readiness without downloading
+        analysis_ready = file_type in ['image', 'pdf']
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(download_url) as response:
-                    if response.status == 200:
-                        async with aiofiles.open(temp_path, 'wb') as f:
-                            async for chunk in response.content.iter_chunked(8192):
-                                await f.write(chunk)
-            
-            # Get detailed file information
-            file_info = get_file_info(temp_path)
-            file_type = file_info.get('file_type', 'unknown')
-            
-            # Determine supported operations
-            supported_operations = []
-            if file_info.get('analysis_ready', False):
-                supported_operations.extend(['analyze', 'download'])
-            
-            if file_type == 'pdf':
-                supported_operations.append('convert_to_images')
-            elif file_type == 'image':
-                supported_operations.extend(['enhance', 'resize', 'crop'])
-            
-            return FileInfoResponse(
-                id=file_record.id,
-                filename=file_record.filename,
-                file_type=file_type,
-                mime_type=file_record.mime_type,
-                file_size=file_record.file_size,
-                upload_timestamp=file_record.upload_timestamp,
-                analysis_ready=file_info.get('analysis_ready', False),
-                pages=file_info.get('pages', 1),
-                metadata=file_info.get('metadata', {}),
-                supported_operations=supported_operations
-            )
-            
-        finally:
-            # Clean up temporary file
-            import os
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+        # Estimate pages based on file type
+        pages = 1  # Default for images
+        if file_type == 'pdf':
+            # For PDFs, we can't know exact page count without reading the file
+            # but we can provide a reasonable default
+            pages = 1
+        
+        # Build metadata from available information
+        metadata = {
+            'etag': s3_metadata.get('etag'),
+            'last_modified': s3_metadata.get('last_modified'),
+            'server_side_encryption': s3_metadata.get('server_side_encryption'),
+            's3_metadata': s3_metadata.get('s3_metadata', {}),
+            'content_length_s3': s3_metadata.get('content_length')
+        }
+        
+        # Get supported operations
+        supported_operations = _get_supported_operations(file_type, analysis_ready)
+        
+        return FileInfoResponse(
+            id=file_record.id,
+            filename=file_record.filename,
+            file_type=file_type,
+            mime_type=file_record.mime_type,
+            file_size=file_record.file_size,
+            upload_timestamp=file_record.upload_timestamp,
+            analysis_ready=analysis_ready,
+            pages=pages,
+            metadata=metadata,
+            supported_operations=supported_operations
+        )
     
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to analyze file: {str(e)}"
+            detail=f"Failed to get file info: {str(e)}"
         )
 
 
