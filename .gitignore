@@ -85,10 +85,6 @@ app.log
 *.sqlite3
 test.db
 
-# Alembic
-# alembic/versions/*
-# !alembic/versions/.gitkeep
-
 # Node.js
 node_modules/
 npm-debug.log*
@@ -310,7 +306,6 @@ PROJECT.md
 .claude/commands/execute-prp.md
 .claude/commands/generate-prp.md
 .github/copilot-instructions.md
-backend/alembic/versions/
 PRPs
 .env.development
 test.png
