@@ -1,10 +1,7 @@
 import pytest
-import pytest_asyncio
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-import json
 from datetime import datetime, timezone
 import tempfile
 import os
@@ -14,7 +11,6 @@ from app.main import app
 from app.models.file import FileRecord
 from app.models.analysis import AnalysisResult
 from app.schemas.analysis import AnalysisRequest, AnalysisResponse, ForensicsResult, OCRResult, RuleEngineResult
-from app.api.v1.analyze import router
 
 
 @pytest.fixture
@@ -138,7 +134,7 @@ def sample_image_file():
     
     try:
         os.unlink(temp_file.name)
-    except:
+    except OSError:
         pass
 
 
@@ -612,7 +608,6 @@ def mock_open_aiofiles():
 @pytest.mark.asyncio
 async def test_analyze_check_request_validation():
     """Test analysis request validation."""
-    from app.schemas.analysis import AnalysisRequest
     
     # Valid request
     request = AnalysisRequest(

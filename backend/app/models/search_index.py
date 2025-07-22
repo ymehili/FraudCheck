@@ -5,7 +5,6 @@ Search Index model for optimized full-text search.
 from sqlalchemy import Column, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from ..database import Base
-from .analysis import AnalysisResult
 
 
 class SearchIndex(Base):

@@ -2,8 +2,8 @@
 Comprehensive tests for database module to achieve 90%+ coverage.
 """
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from unittest.mock import patch, AsyncMock
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.database import get_db, engine, AsyncSessionLocal
@@ -48,7 +48,7 @@ class TestDatabaseModule:
             mock_session_local.return_value = async_context_manager
             
             db_gen = get_db()
-            db = await db_gen.__anext__()
+            await db_gen.__anext__()
             
             # Simulate an exception during usage
             try:
@@ -70,7 +70,7 @@ class TestDatabaseModule:
             mock_session_local.return_value.__aexit__.return_value = None
             
             db_gen = get_db()
-            db = await db_gen.__anext__()
+            await db_gen.__anext__()
             
             # Close the generator normally
             try:
@@ -155,8 +155,8 @@ class TestDatabaseModule:
             db_gen1 = get_db()
             db_gen2 = get_db()
             
-            db1 = await db_gen1.__anext__()
-            db2 = await db_gen2.__anext__()
+            await db_gen1.__anext__()
+            await db_gen2.__anext__()
             
             # Should create separate sessions
             assert mock_session_local.call_count == 2

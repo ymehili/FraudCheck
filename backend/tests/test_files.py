@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.models.user import User
 from app.models.file import FileRecord

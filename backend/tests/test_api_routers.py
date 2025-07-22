@@ -1,6 +1,3 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from fastapi.testclient import TestClient
 
 from app.api.v1.api import router
 from app.api.v1.auth import router as auth_router
@@ -115,10 +112,8 @@ class TestApiRouters:
     def test_route_security(self):
         """Test route security configurations."""
         # Some routes should have security dependencies
-        secure_routes_found = False
         for route in files_router.routes:
             if hasattr(route, 'dependencies') and route.dependencies:
-                secure_routes_found = True
                 break
         
         # At least some routes should have dependencies (for auth)

@@ -1,5 +1,4 @@
 import pytest
-from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User

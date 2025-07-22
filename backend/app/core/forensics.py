@@ -8,10 +8,10 @@ from skimage import feature, measure
 from skimage.color import rgb2gray
 import logging
 
+from ..schemas.analysis import ForensicsResult
+
 # Suppress numpy warnings for division by zero and invalid values
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='numpy')
-
-from ..schemas.analysis import ForensicsResult
 
 logger = logging.getLogger(__name__)
 

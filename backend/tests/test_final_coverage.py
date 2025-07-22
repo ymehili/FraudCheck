@@ -278,7 +278,7 @@ class TestErrorPaths:
     
     def test_image_validation_error_paths(self):
         """Test image validation error handling."""
-        from app.utils.image_utils import validate_image_file, ImageValidationError
+        from app.utils.image_utils import validate_image_file
         
         # Test with non-existent file
         with pytest.raises(ImageProcessingError):

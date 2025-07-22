@@ -2,9 +2,12 @@ from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from ..database import Base
+
+if TYPE_CHECKING:
+    from .file import FileRecord
 
 
 class User(Base):

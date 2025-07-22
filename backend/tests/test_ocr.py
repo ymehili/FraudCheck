@@ -1,9 +1,8 @@
 import pytest
-import pytest_asyncio
 from PIL import Image
 import tempfile
 import os
-from unittest.mock import patch, Mock, AsyncMock, MagicMock
+from unittest.mock import patch, Mock
 import json
 
 from app.core.ocr import OCREngine, OCRError, create_ocr_engine, CheckFieldsSchema
@@ -62,7 +61,7 @@ def sample_image():
     # Cleanup
     try:
         os.unlink(temp_file.name)
-    except:
+    except OSError:
         pass
 
 

@@ -32,9 +32,9 @@ export interface ForensicsResult {
   font_score: number;
   overall_score: number;
   detected_anomalies: string[];
-  edge_inconsistencies: Record<string, any>;
-  compression_artifacts: Record<string, any>;
-  font_analysis: Record<string, any>;
+  edge_inconsistencies: Record<string, unknown>;
+  compression_artifacts: Record<string, unknown>;
+  font_analysis: Record<string, unknown>;
 }
 
 export interface OCRResult {
@@ -72,9 +72,9 @@ export interface DashboardStats {
   average_risk_score: number;
   average_confidence: number;
   average_processing_time?: number;
-  most_common_violations: Array<Record<string, any>>;
+  most_common_violations: Array<Record<string, unknown>>;
   trend_data: TrendDataPoint[];
-  processing_stats: Record<string, any>;
+  processing_stats: Record<string, unknown>;
   recent_analyses?: Array<{
     analysis_id: string;
     risk_score: number;
@@ -105,7 +105,7 @@ export interface AnalysisRequest {
 
 export interface FileUploadRequest {
   file: File;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // Common API Types

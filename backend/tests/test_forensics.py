@@ -1,12 +1,9 @@
 import pytest
-import pytest_asyncio
 import numpy as np
 import cv2
 from PIL import Image
-import io
 import tempfile
 import os
-from unittest.mock import patch, Mock, AsyncMock
 
 from app.core.forensics import ForensicsEngine
 from app.schemas.analysis import ForensicsResult
@@ -41,7 +38,7 @@ def sample_image():
     # Cleanup
     try:
         os.unlink(temp_file.name)
-    except:
+    except OSError:
         pass
 
 
@@ -57,7 +54,7 @@ def corrupted_image():
     # Cleanup
     try:
         os.unlink(temp_file.name)
-    except:
+    except OSError:
         pass
 
 

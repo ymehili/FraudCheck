@@ -1,11 +1,9 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from app.api.v1.files import upload_file_debug
 from app.models.user import User
-from app.models.file import FileRecord
 
 
 class TestFilesCoverageBoost:

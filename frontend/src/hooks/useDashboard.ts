@@ -78,7 +78,7 @@ export function useDashboard(options: UseDashboardOptions = {}): UseDashboardRet
       }
 
       // Prepare filters for API calls
-      const dashboardFilters: any = {};
+      const dashboardFilters: Record<string, unknown> = {};
       if (currentFilters.dateRange?.start) {
         dashboardFilters.start_date = currentFilters.dateRange.start;
       }
@@ -89,7 +89,7 @@ export function useDashboard(options: UseDashboardOptions = {}): UseDashboardRet
         dashboardFilters.risk_threshold = currentFilters.riskScore.min;
       }
 
-      const historyFilters: any = {
+      const historyFilters: Record<string, unknown> = {
         ...dashboardFilters,
       };
       if (currentFilters.status) {
@@ -248,7 +248,7 @@ export function useDashboardStats(filters?: Partial<FilterState>) {
       }
 
       // Prepare filters for API
-      const apiFilters: any = {};
+      const apiFilters: Record<string, unknown> = {};
       if (filters?.dateRange?.start) apiFilters.start_date = filters.dateRange.start;
       if (filters?.dateRange?.end) apiFilters.end_date = filters.dateRange.end;
       if (filters?.riskScore?.min) apiFilters.risk_threshold = filters.riskScore.min;

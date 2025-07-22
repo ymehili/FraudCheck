@@ -1,41 +1,10 @@
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.models.user import User
 from app.models.file import FileRecord
-from app.api.v1.files import upload_file_debug, get_file, delete_file, download_file
-
-
-class TestFilesAdditional:
-    """Additional test for file management endpoints."""
-
-    @patch('app.api.v1.files.s3_service')
-    @pytest.mark.asyncio
-    async def test_upload_file_debug_endpoint_new_user(self, mock_s3_service, db_session):
-        """Test upload_file_debug endpoint with new user."""
-        from fastapi import UploadFile
-        import io
-        
-        # Mock S3 service
-        from unittest.mock import AsyncMock
-        mock_s3_service.validate_file.return_value = True
-        mock_s3_service.upload_file = AsyncMock(return_value={
-            's3_key': 'test/key.jpg',
-            's3_url': 'https://test-bucket.s3.amazonaws.com/test/key.jpg',
-            'file_size': 1024,
-            'content_type': 'image/jpeg'
-        })
-        
-        # Create mock fileck import patch, MagicMock
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
-
-from app.api.v1.files import upload_file, upload_file_debug, list_files, get_file, delete_file, download_file
-from app.models.user import User
-from app.models.file import FileRecord
+from app.api.v1.files import upload_file_debug, get_file, delete_file, download_file, upload_file, list_files
 
 
 class TestFilesAdditional:

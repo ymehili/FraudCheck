@@ -1,11 +1,9 @@
 import pytest
-import pytest_asyncio
 import json
 import tempfile
 import os
-from unittest.mock import patch, Mock
 
-from app.core.rule_engine import RuleEngine, Rule, RuleEvaluationResult, RuleEngineError, load_rule_engine
+from app.core.rule_engine import RuleEngine, Rule, RuleEvaluationResult, load_rule_engine
 from app.schemas.analysis import ForensicsResult, OCRResult, RuleEngineResult
 
 
@@ -90,7 +88,7 @@ def temp_rules_file(sample_rules_config):
     
     try:
         os.unlink(temp_file.name)
-    except:
+    except OSError:
         pass
 
 

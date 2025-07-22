@@ -1,11 +1,9 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException, UploadFile
 from botocore.exceptions import ClientError, NoCredentialsError
-import boto3
-import uuid
 
-from app.core.s3 import S3Service, s3_service
+from app.core.s3 import S3Service
 from app.core.config import settings
 
 
@@ -46,7 +44,7 @@ class TestS3Service:
                 mock_client = MagicMock()
                 mock_boto3.return_value = mock_client
                 
-                service = S3Service()
+                S3Service()
                 
                 # Verify endpoint_url was passed to boto3.client
                 mock_boto3.assert_called_once()

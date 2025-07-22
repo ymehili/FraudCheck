@@ -7,10 +7,9 @@ including dashboard statistics, analysis history, filtering, and pagination.
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from enum import Enum
 
-from .analysis import AnalysisResultResponse
 
 
 class RiskLevel(str, Enum):

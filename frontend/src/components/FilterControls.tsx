@@ -25,15 +25,15 @@ export interface FilterState {
 }
 
 interface FilterControlsProps {
-  filters?: any;
-  onFiltersChange: (filters: any) => void;
+  filters?: Record<string, unknown>;
+  onFiltersChange: (filters: Record<string, unknown>) => void;
   className?: string;
   showSearch?: boolean;
   showStatusFilter?: boolean;
   showStatus?: boolean;
   showRiskRange?: boolean;
   showDateRange?: boolean;
-  initialFilters?: any;
+  initialFilters?: Record<string, unknown>;
   isLoading?: boolean;
 }
 
@@ -62,7 +62,7 @@ export function FilterControls({
   initialFilters = {},
   isLoading = false,
 }: FilterControlsProps) {
-  const [filters, setFilters] = useState<any>({
+  const [filters, setFilters] = useState<Record<string, unknown>>({
     ...defaultFilters,
     ...initialFilters,
     ...externalFilters,
@@ -85,8 +85,8 @@ export function FilterControls({
     return () => clearTimeout(timeoutId);
   }, [filters]);
 
-  const updateFilter = useCallback((key: string, value: any) => {
-    setFilters((prev: any) => ({ ...prev, [key]: value }));
+  const updateFilter = useCallback((key: string, value: unknown) => {
+    setFilters((prev: Record<string, unknown>) => ({ ...prev, [key]: value }));
   }, []);
 
   const resetFilters = useCallback(() => {

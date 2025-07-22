@@ -1,7 +1,6 @@
 import os
-import tempfile
 import logging
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, List
 from pathlib import Path
 from PIL import Image
 
@@ -18,8 +17,7 @@ from .pdf_utils import (
     PDFValidationError,
     PDFProcessingError,
     convert_pdf_to_image_for_analysis,
-    is_pdf_file,
-    get_pdf_page_count
+    is_pdf_file
 )
 
 logger = logging.getLogger(__name__)
@@ -63,7 +61,7 @@ def get_file_type(file_path: str) -> str:
         
         # Check image formats
         try:
-            with Image.open(file_path) as img:
+            with Image.open(file_path):
                 # If we can open it as an image, it's an image
                 logger.debug(f"File identified as image: {file_path}")
                 return 'image'

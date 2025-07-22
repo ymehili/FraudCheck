@@ -1,7 +1,6 @@
-import os
 import tempfile
 import logging
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any
 from pathlib import Path
 import magic
 from PIL import Image

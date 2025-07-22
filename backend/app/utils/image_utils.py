@@ -1,7 +1,7 @@
 import os
 import tempfile
 import logging
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Dict, Any
 from pathlib import Path
 import cv2
 import numpy as np

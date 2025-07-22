@@ -12,18 +12,14 @@ This module tests all dashboard endpoints including:
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
-import json
+from unittest.mock import patch
 import uuid
 
 from app.models.user import User
 from app.models.file import FileRecord
 from app.models.analysis import AnalysisResult
 from app.schemas.dashboard import (
-    RiskLevel, TimeRange, SortField, SortDirection,
-    RiskScoreRange, DateRange, DashboardFilter, PaginationParams
+    RiskLevel
 )
 
 

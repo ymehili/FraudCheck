@@ -7,15 +7,14 @@ accurate risk assessment and proper error handling.
 
 import pytest
 from unittest.mock import Mock, patch
-from datetime import datetime, timezone
+from datetime import datetime
 from fastapi.testclient import TestClient
 
 from app.core.scoring import (
     RiskScoreCalculator,
     calculate_risk_score,
     RiskLevel,
-    RiskScoreData,
-    RiskScoringError
+    RiskScoreData
 )
 from app.schemas.analysis import ForensicsResult, OCRResult, RuleEngineResult
 from app.main import app
@@ -408,8 +407,6 @@ class TestRiskScoringAPI:
     def test_unauthorized_access(self):
         """Test unauthorized access to scoring endpoints."""
         # Create a client without dependency overrides
-        from fastapi.testclient import TestClient
-        from app.main import app
         
         client = TestClient(app)
         

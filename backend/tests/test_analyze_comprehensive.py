@@ -3,13 +3,11 @@ Comprehensive tests for analyze.py module to achieve 90%+ coverage.
 """
 import pytest
 import tempfile
-import json
 import uuid
 import os
 from datetime import datetime, timezone
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import patch, AsyncMock
 from fastapi import HTTPException
-from starlette.testclient import TestClient
 
 from app.models.user import User
 from app.models.file import FileRecord
@@ -66,7 +64,6 @@ class TestAnalyzeInternalFunctions:
     @pytest.mark.asyncio
     async def test_get_user_file_unauthorized(self, db_session):
         """Test unauthorized file access."""
-        import uuid
         unique_id = uuid.uuid4().hex[:8]
         user1 = User(id="user1", email=f"user1-{unique_id}@example.com")
         user2 = User(id="user2", email=f"user2-{unique_id}@example.com")

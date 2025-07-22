@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { NavigationBar } from '@/components/NavigationBar';
-import { RiskScoreChart } from '@/components/RiskScoreChart';
 import { PDFGenerator } from '@/components/PDFGenerator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,14 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft,
-  Download,
   FileText,
   AlertTriangle,
   CheckCircle,
-  Eye,
   Camera,
   Fingerprint,
   Type,

@@ -134,7 +134,7 @@ async def get_file_info(
         import aiohttp
         import tempfile
         import aiofiles
-        from ...utils.file_utils import get_file_info, get_file_type
+        from ...utils.file_utils import get_file_info
         
         # Download to temporary file
         temp_file = tempfile.NamedTemporaryFile(suffix='.tmp', delete=False)

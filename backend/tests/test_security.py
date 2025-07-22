@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from jose import JWTError
 
 from app.core.security import verify_clerk_token, get_clerk_user_info
-from app.core.config import settings
 
 
 class TestSecurity:

@@ -37,7 +37,7 @@ export function PDFGenerator({
       let currentY = margin;
 
       // Helper function to add text with automatic page breaks
-      const addText = (text: string, x: number, y: number, options?: any) => {
+      const addText = (text: string, x: number, y: number, options?: Record<string, unknown>) => {
         if (y > pageHeight - margin) {
           pdf.addPage();
           currentY = margin;

@@ -238,7 +238,7 @@ export default function UploadPage() {
                 </div>
                 <CardTitle>Camera Capture</CardTitle>
                 <CardDescription>
-                  Take a photo of your check using your device's camera
+                  Take a photo of your check using your device&apos;s camera
                 </CardDescription>
               </CardHeader>
               <CardContent>

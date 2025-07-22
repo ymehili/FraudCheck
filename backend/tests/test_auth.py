@@ -68,7 +68,6 @@ class TestAuth:
         mock_verify_token.return_value = test_user_data
         
         # Mock the user retrieval - create user with proper structure
-        from app.models.user import User
         mock_user = User(
             id=test_user_data["id"],
             email=test_user_data["email"],
@@ -143,7 +142,6 @@ class TestAuth:
         mock_verify_token.return_value = test_user_data
         
         # Mock the user retrieval
-        from app.models.user import User
         mock_user = User(
             id=test_user_data["id"],
             email=test_user_data["email"]
@@ -184,7 +182,6 @@ class TestAuth:
         }
         
         # Create user in database
-        from app.models.user import User
         user = User(
             id=test_data["id"],
             email=test_data["email"]

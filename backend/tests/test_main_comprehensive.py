@@ -1,7 +1,6 @@
 """
 Comprehensive tests for main.py module to achieve 90%+ coverage.
 """
-import pytest
 from unittest.mock import patch, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

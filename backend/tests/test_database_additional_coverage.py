@@ -4,7 +4,6 @@ Tests uncovered lines and edge cases.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 import asyncio
@@ -31,7 +30,6 @@ class TestDatabaseAdditionalCoverage:
 
     def test_base_declarative_base(self):
         """Test Base declarative base creation."""
-        from sqlalchemy.orm import declarative_base
         
         assert Base is not None
         assert hasattr(Base, 'metadata')
@@ -264,7 +262,6 @@ class TestDatabaseAdditionalCoverage:
     async def test_session_lifecycle_complete(self):
         """Test complete session lifecycle."""
         session_opened = False
-        session_used = False
         session_closed = False
         
         async for session in get_db():
@@ -274,7 +271,6 @@ class TestDatabaseAdditionalCoverage:
             try:
                 # Use the session
                 await session.execute(text("SELECT 1"))
-                session_used = True
             except Exception:
                 # Might fail in test environment
                 pass

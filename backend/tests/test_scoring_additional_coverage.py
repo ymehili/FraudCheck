@@ -5,20 +5,16 @@ Tests uncovered lines and edge cases.
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
 from app.models.user import User
 from app.models.file import FileRecord
 from app.models.analysis import AnalysisResult
 from app.schemas.analysis import ForensicsResult, OCRResult, RuleEngineResult
-from app.core.scoring import RiskScoreData, RiskLevel, RiskScoreCalculator
+from app.core.scoring import RiskScoreData, RiskLevel
 from app.api.v1.scoring import (
-    RiskScoreRequest, 
-    BatchRiskScoreRequest,
-    RiskScoreConfigRequest,
     RiskScoreResponse,
     _get_user_analysis,
     _get_existing_risk_score,

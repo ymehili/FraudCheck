@@ -1,6 +1,5 @@
 import pytest
-import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import patch
 import io
 from fastapi import UploadFile
 
@@ -9,7 +8,7 @@ from app.utils.security_validation import (
     SecurityValidationError,
     validate_upload_security
 )
-from app.utils.malware_scanner import MalwareScanner, MalwareDetected
+from app.utils.malware_scanner import MalwareScanner
 
 
 class TestFileSecurityValidator:

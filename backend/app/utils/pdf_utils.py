@@ -1,7 +1,6 @@
 import os
-import tempfile
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 import PyPDF2
 import fitz  # PyMuPDF
@@ -10,10 +9,6 @@ from PIL import Image
 import io
 
 from .image_utils import (
-    validate_image_file, 
-    ImageValidationError, 
-    ImageProcessingError,
-    TempImageFile,
     cleanup_temp_files
 )
 

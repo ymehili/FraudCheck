@@ -1,6 +1,9 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .file import FileResponse
 
 
 class UserBase(BaseModel):
@@ -29,6 +32,6 @@ class UserWithFiles(UserResponse):
     files: List["FileResponse"] = []
 
 
-# Forward reference for circular import
-from .file import FileResponse
+# Forward reference for circular import - moved to end of file
+from .file import FileResponse  # type: ignore
 UserWithFiles.model_rebuild()

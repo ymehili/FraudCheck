@@ -4,7 +4,6 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 import httpx
-import secrets
 from .config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -54,9 +53,9 @@ async def get_clerk_jwks() -> Dict[str, Any]:
             # Remove trailing $ if present
             domain = decoded.rstrip('$')
             jwks_url = f"https://{domain}/.well-known/jwks.json"
-        except Exception as decode_error:
+        except Exception:
             # Fallback to the standard format
-            jwks_url = f"https://api.clerk.com/v1/jwks"
+            jwks_url = "https://api.clerk.com/v1/jwks"
         
         async with httpx.AsyncClient() as client:
             response = await client.get(jwks_url)

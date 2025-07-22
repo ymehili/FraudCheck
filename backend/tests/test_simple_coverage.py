@@ -5,7 +5,6 @@ These tests focus on uncovered lines without complex imports.
 import pytest
 import tempfile
 import os
-from unittest.mock import patch, MagicMock
 from PIL import Image
 
 
@@ -291,7 +290,7 @@ class TestSimpleCoverage:
     @pytest.mark.asyncio
     async def test_ocr_engine_error_paths(self):
         """Test OCR engine error handling."""
-        from app.core.ocr import OCREngine, OCRError
+        from app.core.ocr import OCREngine
         
         engine = OCREngine("fake-api-key")
         

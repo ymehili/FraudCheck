@@ -4,10 +4,8 @@ Comprehensive tests for image_utils module to achieve 90%+ coverage.
 import pytest
 import tempfile
 import os
-from unittest.mock import patch, MagicMock, mock_open
-from PIL import Image, ImageDraw
-import cv2
-import numpy as np
+from unittest.mock import patch, MagicMock
+from PIL import Image
 
 from app.utils.image_utils import (
     validate_image_file,
@@ -20,7 +18,6 @@ from app.utils.image_utils import (
     detect_image_orientation,
     create_thumbnail,
     get_image_info,
-    cleanup_temp_files,
     bytes_to_image,
     image_to_bytes,
     TempImageFile,
@@ -416,7 +413,7 @@ class TestTempImageFile:
     
     def test_temp_image_file_custom_directory(self):
         """Test TempImageFile with custom directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory():
             with TempImageFile(suffix='.jpg') as temp_path:
                 assert temp_path.endswith('.jpg')
 

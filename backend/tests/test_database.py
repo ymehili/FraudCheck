@@ -1,6 +1,4 @@
 import pytest
-from unittest.mock import patch, AsyncMock
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, Base, engine
@@ -32,7 +30,7 @@ class TestDatabase:
                 result = await session.execute("SELECT 1")
                 assert result is not None
                 break  # Only need to test the first yielded session
-        except Exception as e:
+        except Exception:
             # Connection might fail in test environment, but function should work
             assert True  # Test that it doesn't crash
 
@@ -45,7 +43,6 @@ class TestDatabase:
     @pytest.mark.asyncio
     async def test_engine_disposal(self):
         """Test engine disposal."""
-        from app.database import engine
         
         # Should be able to dispose engine without error
         try:

@@ -65,7 +65,7 @@ export default function DashboardPage() {
     fetchDashboardStats(filters);
   }, []);
 
-  const handleFiltersChange = (newFilters: any) => {
+  const handleFiltersChange = (newFilters: Record<string, unknown>) => {
     // Convert filter format from FilterControls to API format
     const apiFilters: DashboardFilters = {};
     

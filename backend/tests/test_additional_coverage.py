@@ -2,9 +2,7 @@
 Additional comprehensive tests to reach 90%+ coverage.
 """
 import pytest
-import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
-from fastapi import HTTPException
 
 from app.api.deps import get_db_session
 from app.core.forensics import ForensicsEngine
@@ -231,7 +229,7 @@ class TestFileUploadEdgeCases:
         # Make file read-only (might not prevent deletion on all systems)
         try:
             os.chmod(temp_file, 0o444)
-        except:
+        except OSError:
             pass
         
         # Should not raise exception even if deletion fails
@@ -241,7 +239,7 @@ class TestFileUploadEdgeCases:
         try:
             os.chmod(temp_file, 0o777)
             os.unlink(temp_file)
-        except:
+        except OSError:
             pass
 
 
@@ -352,7 +350,7 @@ class TestModelEdgeCases:
             user = User(id="test", email="invalid-email")
             # If no validation error, model accepts any string
             assert user.email == "invalid-email"
-        except:
+        except Exception:
             # If validation error, that's also fine
             pass
         
@@ -368,7 +366,7 @@ class TestModelEdgeCases:
             )
             # Model might accept negative values
             assert file_record.file_size == -1
-        except:
+        except Exception:
             # Or it might reject them
             pass
 

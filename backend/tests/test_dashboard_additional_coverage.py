@@ -5,11 +5,7 @@ Tests uncovered lines and edge cases.
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-import json
-import uuid
+from unittest.mock import patch, MagicMock
 
 from app.models.user import User
 from app.models.file import FileRecord
@@ -17,7 +13,7 @@ from app.models.analysis import AnalysisResult
 from app.schemas.dashboard import (
     RiskLevel, TimeRange, SortField, SortDirection,
     RiskScoreRange, DateRange, DashboardFilter, PaginationParams,
-    DashboardSearchRequest, EnhancedAnalysisResult, RiskDistribution
+    EnhancedAnalysisResult
 )
 from app.api.v1.dashboard import (
     _get_risk_distribution,

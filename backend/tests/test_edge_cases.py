@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi import HTTPException
+from unittest.mock import patch
 import uuid
 
 from app.models.file import FileRecord
@@ -171,7 +170,7 @@ class TestEdgeCases:
         """Test handling of empty strings."""
         # Test models with empty strings where not allowed
         try:
-            user = User(id="", email="test@example.com")
+            User(id="", email="test@example.com")
             # Empty ID might be allowed or not, depending on validation
         except Exception:
             # If validation fails, that's expected

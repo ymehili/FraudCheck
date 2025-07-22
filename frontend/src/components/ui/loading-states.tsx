@@ -140,7 +140,7 @@ interface LoadingButtonProps {
   children: React.ReactNode;
   loadingText?: string;
   className?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export function LoadingButton({ 
