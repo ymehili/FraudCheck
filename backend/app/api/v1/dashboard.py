@@ -138,8 +138,8 @@ async def _get_dashboard_stats_cached(user_id: str, db: AsyncSession) -> Dashboa
         # Get most common violations
         most_common_violations = await _get_most_common_violations(db, user_id)
         
-        # Get trend data for the last 30 days
-        trend_data = await _get_trend_data(db, user_id, days=30)
+        # Get trend data for the last 30 days using optimized single query
+        trend_data = await _get_trend_data_optimized(db, user_id, days=30)
         
         # Get processing statistics
         processing_stats = await _get_processing_stats(db, user_id)
@@ -598,22 +598,31 @@ async def _get_most_common_violations(db: AsyncSession, user_id: str) -> List[Di
         return []
 
 
-async def _get_trend_data(db: AsyncSession, user_id: str, days: int = 30) -> List[TrendDataPoint]:
-    """Get trend data for the specified number of days."""
+async def _get_trend_data_optimized(db: AsyncSession, user_id: str, days: int = 30) -> List[TrendDataPoint]:
+    """Get trend data using single optimized query with conditional aggregation."""
     try:
+        query_start_time = datetime.utcnow()
+        
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
         
-        # Get analyses grouped by date
+        # Single optimized query with conditional aggregation for risk distribution
         trend_query = (
             select(
                 func.date(AnalysisResult.analysis_timestamp).label('date'),
                 func.count(AnalysisResult.id).label('count'),
-                func.avg(AnalysisResult.overall_risk_score).label('avg_risk')
+                func.avg(AnalysisResult.overall_risk_score).label('avg_risk'),
+                # Risk distribution calculated in same query using conditional aggregation
+                func.sum(case((AnalysisResult.overall_risk_score < 30, 1), else_=0)).label('risk_low'),
+                func.sum(case((and_(AnalysisResult.overall_risk_score >= 30, AnalysisResult.overall_risk_score < 60), 1), else_=0)).label('risk_medium'),
+                func.sum(case((and_(AnalysisResult.overall_risk_score >= 60, AnalysisResult.overall_risk_score < 80), 1), else_=0)).label('risk_high'),
+                func.sum(case((AnalysisResult.overall_risk_score >= 80, 1), else_=0)).label('risk_critical')
             )
+            .select_from(AnalysisResult)
+            .join(FileRecord)  # Join for user filtering
             .where(
                 and_(
-                    AnalysisResult.file.has(FileRecord.user_id == user_id),
+                    FileRecord.user_id == user_id,
                     AnalysisResult.analysis_timestamp >= start_date
                 )
             )
@@ -621,14 +630,28 @@ async def _get_trend_data(db: AsyncSession, user_id: str, days: int = 30) -> Lis
             .order_by(func.date(AnalysisResult.analysis_timestamp))
         )
         
+        # Log single query execution for performance verification
+        logger.info(f"Executing optimized trend data query for user {user_id} ({days} days) - SINGLE QUERY")
+        
         result = await db.execute(trend_query)
+        
+        query_end_time = datetime.utcnow()
+        query_duration = (query_end_time - query_start_time).total_seconds()
+        
         trend_data = []
         
+        # Build TrendDataPoint objects from single query results
         for row in result.fetchall():
-            date, count, avg_risk = row
+            date, count, avg_risk, risk_low, risk_medium, risk_high, risk_critical = row
             
-            # Calculate risk distribution for this date
-            risk_dist = await _get_risk_distribution_for_date(db, user_id, date)
+            # Build RiskDistribution from single query results
+            risk_dist = RiskDistribution(
+                low=risk_low or 0,
+                medium=risk_medium or 0,
+                high=risk_high or 0,
+                critical=risk_critical or 0,
+                total=count or 0
+            )
             
             trend_data.append(TrendDataPoint(
                 date=datetime.combine(date, datetime.min.time()),
@@ -637,45 +660,16 @@ async def _get_trend_data(db: AsyncSession, user_id: str, days: int = 30) -> Lis
                 risk_distribution=risk_dist
             ))
         
+        # Log performance metrics
+        logger.info(f"Optimized trend data query completed in {query_duration:.4f}s, returned {len(trend_data)} data points")
+        
         return trend_data
         
     except Exception as e:
-        logger.error(f"Failed to get trend data: {str(e)}")
+        logger.error(f"Failed to get optimized trend data: {str(e)}")
         return []
 
 
-async def _get_risk_distribution_for_date(db: AsyncSession, user_id: str, date) -> RiskDistribution:
-    """Get risk distribution for a specific date."""
-    try:
-        analyses_query = (
-            select(AnalysisResult.overall_risk_score)
-            .where(
-                and_(
-                    AnalysisResult.file.has(FileRecord.user_id == user_id),
-                    func.date(AnalysisResult.analysis_timestamp) == date
-                )
-            )
-        )
-        
-        result = await db.execute(analyses_query)
-        risk_scores = [row[0] for row in result.fetchall()]
-        
-        low = sum(1 for score in risk_scores if score < 30)
-        medium = sum(1 for score in risk_scores if 30 <= score < 60)
-        high = sum(1 for score in risk_scores if 60 <= score < 80)
-        critical = sum(1 for score in risk_scores if score >= 80)
-        
-        return RiskDistribution(
-            low=low,
-            medium=medium,
-            high=high,
-            critical=critical,
-            total=len(risk_scores)
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to get risk distribution for date: {str(e)}")
-        return RiskDistribution(low=0, medium=0, high=0, critical=0, total=0)
 
 
 async def _get_processing_stats(db: AsyncSession, user_id: str) -> Dict[str, Any]:
