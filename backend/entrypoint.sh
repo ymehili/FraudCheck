@@ -1,8 +1,6 @@
 #!/bin/bash
-"""
-Backend Entrypoint Script for CheckGuard
-This script handles initialization and starts the backend service
-"""
+# Backend Entrypoint Script for CheckGuard
+# This script handles initialization and starts the backend service
 
 set -e
 

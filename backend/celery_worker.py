@@ -34,7 +34,6 @@ def main():
     # Worker configuration
     worker_args = [
         'worker',
-        '--app=app.tasks.celery_app:celery_app',
         '--loglevel=info',
         '--concurrency=2',  # Limit concurrency for resource management
         '--queues=analysis',  # Only process analysis tasks

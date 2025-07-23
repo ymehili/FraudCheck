@@ -3,7 +3,13 @@ import { auth } from '@clerk/nextjs/server';
 
 const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://backend:8000';
 
-export async function POST(request: NextRequest) {
+interface RouteParams {
+  params: Promise<{
+    id: string;
+  }>;
+}
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Get authentication from Clerk
     const { getToken } = await auth();
@@ -16,25 +22,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get JSON body from the request
-    const body = await request.json();
+    // Get task ID from params
+    const { id } = await params;
     
-    // Validate that a file_id was provided
-    if (!body.file_id) {
+    if (!id) {
       return NextResponse.json(
-        { error: 'No file_id provided' },
+        { error: 'Task ID is required' },
         { status: 400 }
       );
     }
 
-    // Forward the request to the new async backend endpoint
-    const backendResponse = await fetch(`${API_BASE_URL}/api/v1/analyze/async`, {
-      method: 'POST',
+    // Forward the request to the backend task status endpoint
+    const backendResponse = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
     });
 
     // Handle backend response
@@ -44,7 +48,7 @@ export async function POST(request: NextRequest) {
       }));
       
       return NextResponse.json(
-        { error: errorData.detail || 'Analysis failed' },
+        { error: errorData.message || errorData.detail || 'Failed to get task status', ...errorData },
         { status: backendResponse.status }
       );
     }
@@ -54,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(responseData);
 
   } catch (error) {
-    console.error('Analyze API route error:', error);
+    console.error('Task status API route error:', error);
     
     // Handle specific error types
     if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -77,7 +81,7 @@ export async function OPTIONS(request: NextRequest) {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });

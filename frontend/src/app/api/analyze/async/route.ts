@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Forward the request to the new async backend endpoint
+    // Forward the request to the backend streaming async endpoint
     const backendResponse = await fetch(`${API_BASE_URL}/api/v1/analyze/async`, {
       method: 'POST',
       headers: {
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       }));
       
       return NextResponse.json(
-        { error: errorData.detail || 'Analysis failed' },
+        { error: errorData.message || errorData.detail || 'Analysis failed', ...errorData },
         { status: backendResponse.status }
       );
     }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(responseData);
 
   } catch (error) {
-    console.error('Analyze API route error:', error);
+    console.error('Async Analyze API route error:', error);
     
     // Handle specific error types
     if (error instanceof TypeError && error.message.includes('fetch')) {

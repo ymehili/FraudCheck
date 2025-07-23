@@ -16,6 +16,12 @@ from ..core.config import settings
 from ..models.task_status import TaskStatus, TaskStatusEnum
 from ..models.file import FileRecord
 from ..models.analysis import AnalysisResult
+from ..core.streaming import StreamingFileProcessor, StreamProgress
+from .resource_monitor import (
+    create_resource_monitor_for_file,
+    ResourceLimitError,
+    log_resource_usage
+)
 from ..core.forensics import ForensicsEngine
 from ..core.ocr import create_ocr_engine
 from ..core.rule_engine import load_rule_engine
@@ -288,21 +294,23 @@ def store_analysis_results_sync(
         raise
 
 
-@celery_app.task(bind=True, name='app.tasks.analysis_tasks.analyze_check_async')
-def analyze_check_async(self, file_id: str, analysis_types: list, page_number: int = 1):
+@celery_app.task(bind=True, name='app.tasks.analysis_tasks.analyze_check_streaming')
+def analyze_check_streaming(self, file_id: str, analysis_types: list, page_number: int = 1):
     """
-    Background task for check analysis.
+    Streaming background task for check analysis with resource monitoring.
     
-    This task replicates the synchronous analysis workflow but runs in the background.
-    All async functions are wrapped with asyncio.run() for Celery compatibility.
+    This task uses streaming file processing and resource monitoring to prevent
+    memory exhaustion and provide real-time progress updates.
     """
     task_id = self.request.id
-    logger.info(f"Starting analysis task {task_id} for file {file_id}")
+    logger.info(f"Starting streaming analysis task {task_id} for file {file_id}")
+    
+    # Initialize resource monitor (will be configured based on file size)
+    monitor = None
+    temp_files_to_cleanup = []
     
     # Update initial status
-    update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.1)
-    
-    temp_files_to_cleanup = []
+    update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.05)
     
     try:
         # Create new database session for task
@@ -311,28 +319,99 @@ def analyze_check_async(self, file_id: str, analysis_types: list, page_number: i
             file_record = get_user_file_sync(file_id, db)
             logger.info(f"Found file record: {file_record.filename}")
             
-            # Download file from S3
-            temp_file_path = asyncio.run(download_file_sync(file_record.s3_key))
-            temp_files_to_cleanup.append(temp_file_path)
-            logger.info(f"Downloaded file to: {temp_file_path}")
+            # Create resource monitor based on file size
+            file_size_bytes = getattr(file_record, 'file_size', 0) or 0
+            monitor = create_resource_monitor_for_file(file_size_bytes)
+            logger.info(f"Resource monitor configured for {file_size_bytes} byte file")
             
-            update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.2)
+            # Progress callback for streaming operations
+            def progress_callback(progress: StreamProgress):
+                # Convert streaming progress to task progress
+                if progress.phase == "downloading":
+                    task_progress = 0.1 + (progress.progress_percentage / 100.0) * 0.1  # 0.1-0.2
+                elif progress.phase == "validation":
+                    task_progress = 0.2 + (progress.progress_percentage / 100.0) * 0.1  # 0.2-0.3
+                elif progress.phase == "preprocessing":
+                    task_progress = 0.3 + (progress.progress_percentage / 100.0) * 0.1  # 0.3-0.4
+                else:
+                    task_progress = 0.4
+                
+                # Include resource usage in progress updates
+                try:
+                    if monitor:
+                        usage = monitor.check_resources()
+                        meta = {
+                            'phase': progress.phase,
+                            'progress': task_progress,
+                            'bytes_processed': progress.bytes_processed,
+                            'total_bytes': progress.total_bytes,
+                            'resource_usage': {
+                                'memory_mb': usage.memory_mb,
+                                'peak_memory_mb': usage.peak_memory_mb,
+                                'cpu_percent': usage.cpu_percent,
+                                'processing_time_seconds': usage.processing_time_seconds
+                            }
+                        }
+                    else:
+                        meta = {
+                            'phase': progress.phase,
+                            'progress': task_progress,
+                            'bytes_processed': progress.bytes_processed,
+                            'total_bytes': progress.total_bytes
+                        }
+                    
+                    self.update_state(state='PROGRESS', meta=meta)
+                except Exception as e:
+                    logger.warning(f"Progress update failed: {str(e)}")
             
-            # Validate and preprocess file
-            prepared_path = asyncio.run(
-                validate_and_preprocess_file_async(temp_file_path, page_number)
-            )
-            if prepared_path != temp_file_path:
-                temp_files_to_cleanup.append(prepared_path)
-            logger.info(f"File prepared for analysis: {prepared_path}")
+            # Use streaming file processor and run analysis inside context
+            async def process_with_streaming_and_analysis():
+                async with StreamingFileProcessor(
+                    file_record.s3_key,
+                    page_number,
+                    progress_callback
+                ) as prepared_path:
+                    temp_files_to_cleanup.append(prepared_path)
+                    logger.info(f"File prepared for analysis: {prepared_path}")
+                    
+                    # Update progress after preprocessing
+                    if monitor:
+                        usage = monitor.check_resources()
+                        log_resource_usage(usage, "preprocessing")
+                    
+                    update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.4)
+                    
+                    # Update intermediate progress during analysis phases
+                    self.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'phase': 'forensics',
+                            'progress': 0.5,
+                            'current_operation': 'Running forensics analysis'
+                        }
+                    )
+                    
+                    # Run comprehensive analysis with resource monitoring inside context
+                    if monitor:
+                        # Monitor the analysis operation
+                        analysis_result = await monitor.monitor_async_operation(
+                            run_comprehensive_analysis_async(prepared_path, analysis_types),
+                            f"analysis-{task_id}"
+                        )
+                    else:
+                        analysis_result = await run_comprehensive_analysis_async(prepared_path, analysis_types)
+                    
+                    return analysis_result
             
-            update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.3)
-            
-            # Run comprehensive analysis
-            analysis_result = asyncio.run(
-                run_comprehensive_analysis_async(prepared_path, analysis_types)
-            )
+            analysis_result = asyncio.run(process_with_streaming_and_analysis())
             logger.info(f"Analysis completed for task {task_id}")
+            
+            # Log final resource usage
+            if monitor:
+                final_usage = monitor.check_resources()
+                log_resource_usage(final_usage, "analysis_complete")
+                usage_summary = monitor.get_usage_summary()
+                logger.info(f"Resource usage summary: {usage_summary}")
             
             update_task_status(task_id, TaskStatusEnum.PROCESSING, progress=0.8)
             
@@ -340,7 +419,11 @@ def analyze_check_async(self, file_id: str, analysis_types: list, page_number: i
             result_record = store_analysis_results_sync(file_id, analysis_result, db)
             logger.info(f"Results stored with ID: {result_record.id}")
             
-            # Update final status
+            # Update final status with resource usage summary
+            final_meta = {"result_id": result_record.id}
+            if monitor:
+                final_meta["resource_usage_summary"] = monitor.get_usage_summary()
+            
             update_task_status(
                 task_id, 
                 TaskStatusEnum.SUCCESS, 
@@ -351,11 +434,40 @@ def analyze_check_async(self, file_id: str, analysis_types: list, page_number: i
             return {
                 "result_id": result_record.id, 
                 "status": "completed",
-                "task_id": task_id
+                "task_id": task_id,
+                "resource_usage": final_meta.get("resource_usage_summary")
             }
             
+    except ResourceLimitError as exc:
+        logger.error(f"Analysis task {task_id} terminated due to resource limits: {str(exc)}")
+        
+        # Log resource usage at termination
+        if monitor:
+            try:
+                usage = monitor.check_resources()
+                log_resource_usage(usage, "resource_limit_exceeded")
+            except Exception:
+                pass
+        
+        # Don't retry resource limit errors - they'll likely fail again
+        update_task_status(
+            task_id,
+            TaskStatusEnum.FAILED,
+            error_message=f"Resource limit exceeded: {str(exc)}"
+        )
+        
+        raise exc
+        
     except Exception as exc:
         logger.error(f"Analysis task {task_id} failed: {str(exc)}")
+        
+        # Log resource usage at failure
+        if monitor:
+            try:
+                usage = monitor.check_resources()
+                log_resource_usage(usage, "task_failed")
+            except Exception:
+                pass
         
         # Update status to retry for automatic retry
         update_task_status(
@@ -364,15 +476,45 @@ def analyze_check_async(self, file_id: str, analysis_types: list, page_number: i
             error_message=str(exc)
         )
         
-        # Automatic retry with exponential backoff
-        retry_count = self.request.retries
-        countdown = 60 * (2 ** retry_count)  # 60s, 120s, 240s...
-        
-        logger.info(f"Retrying task {task_id} in {countdown} seconds (attempt {retry_count + 1}/3)")
-        
-        raise self.retry(exc=exc, countdown=countdown, max_retries=3)
+        # Automatic retry with exponential backoff (but not for resource limit errors)
+        if not isinstance(exc, ResourceLimitError):
+            retry_count = self.request.retries
+            countdown = 60 * (2 ** retry_count)  # 60s, 120s, 240s...
+            
+            logger.info(f"Retrying task {task_id} in {countdown} seconds (attempt {retry_count + 1}/3)")
+            
+            raise self.retry(exc=exc, countdown=countdown, max_retries=3)
+        else:
+            # Don't retry resource limit errors
+            raise
         
     finally:
         # Clean up temporary files
         if temp_files_to_cleanup:
-            cleanup_temp_files(temp_files_to_cleanup)
+            try:
+                cleanup_temp_files(temp_files_to_cleanup)
+            except Exception as cleanup_error:
+                logger.warning(f"Cleanup failed: {str(cleanup_error)}")
+        
+        # Log final resource state
+        if monitor:
+            try:
+                final_usage = monitor.check_resources()
+                logger.info(
+                    f"Task {task_id} final resource usage: "
+                    f"memory={final_usage.memory_mb:.1f}MB (peak={final_usage.peak_memory_mb:.1f}MB), "
+                    f"time={final_usage.processing_time_seconds:.1f}s"
+                )
+            except Exception:
+                pass
+
+
+# Legacy task name for backward compatibility
+@celery_app.task(bind=True, name='app.tasks.analysis_tasks.analyze_check_async')
+def analyze_check_async(self, file_id: str, analysis_types: list, page_number: int = 1):
+    """
+    Legacy task - redirects to streaming version.
+    Maintained for backward compatibility.
+    """
+    logger.info(f"Legacy task called, redirecting to streaming version for file {file_id}")
+    return analyze_check_streaming(self, file_id, analysis_types, page_number)

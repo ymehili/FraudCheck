@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
@@ -15,7 +15,6 @@ from ...models.file import FileRecord
 from ...models.analysis import AnalysisResult
 from ...models.task_status import TaskStatus, TaskStatusEnum
 from ...schemas.analysis import (
-    AnalysisRequest, 
     AnalysisResponse, 
     AnalysisResultResponse,
     AnalysisListResponse,
@@ -29,14 +28,7 @@ from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
 from ...core.rule_engine import load_rule_engine
 from ...core.scoring import RiskScoreCalculator, RiskScoreData
-from ...core.s3 import s3_service
-from ...utils.file_utils import (
-    validate_file_for_analysis,
-    prepare_file_for_analysis,
-    FileValidationError,
-    FileProcessingError
-)
-from ...utils.image_utils import cleanup_temp_files
+# Removed unused imports - functions only used by deprecated sync endpoint
 from ..deps import get_current_user
 
 router = APIRouter(tags=["analysis"])
@@ -79,85 +71,31 @@ def _convert_numpy_types(obj: Any) -> Any:
         return obj
 
 
-@router.post("/", response_model=AnalysisResponse)
-async def analyze_check(
-    request: AnalysisRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-):
+@router.post("/", status_code=410)
+async def analyze_check_deprecated():
     """
-    Analyze a check image for fraud detection.
+    Deprecated synchronous analysis endpoint.
     
-    This endpoint performs comprehensive analysis including:
-    - Image forensics (edge detection, compression artifacts, font consistency)
-    - OCR field extraction using Gemini API
-    - Rule-based fraud detection with risk scoring
+    This endpoint has been removed to prevent memory exhaustion issues.
+    Use the /async endpoint instead for reliable analysis.
     """
-    try:
-        # Validate file ownership and existence
-        file_record = await _get_user_file(request.file_id, current_user.id, db)
-        
-        # Check if analysis already exists
-        existing_analysis = await _get_existing_analysis(request.file_id, db)
-        if existing_analysis:
-            logger.info(f"Returning existing analysis for file {request.file_id}")
-            return await _format_analysis_response(existing_analysis)
-        
-        # Download file from S3 for analysis
-        temp_file_path = await _download_file_for_analysis(file_record.s3_key)
-        
-        try:
-            # Validate and preprocess file (handles both images and PDFs)
-            prepared_file_path = await _validate_and_preprocess_file(temp_file_path, request.page_number or 1)
-            
-            # Run analysis components with timeout
-            try:
-                analysis_result = await asyncio.wait_for(
-                    _run_comprehensive_analysis(prepared_file_path, request.analysis_types),
-                    timeout=120.0  # 2 minutes timeout
-                )
-            except asyncio.TimeoutError:
-                logger.error(f"Analysis timeout for file {request.file_id} after 120 seconds")
-                raise HTTPException(
-                    status_code=408,
-                    detail="Analysis timeout - file may be too complex or large for processing"
-                )
-            
-            # Store analysis results in database
-            analysis_record = await _store_analysis_results(
-                request.file_id,
-                analysis_result,
-                db
-            )
-            
-            # Format response
-            response = await _format_analysis_response(analysis_record)
-            
-            # Clean up temporary files in background
-            files_to_cleanup = [temp_file_path]
-            if prepared_file_path != temp_file_path:
-                files_to_cleanup.append(prepared_file_path)
-            background_tasks.add_task(cleanup_temp_files, files_to_cleanup)
-            
-            return response
-            
-        except Exception:
-            # Clean up temporary files on error
-            files_to_cleanup = [temp_file_path]
-            if 'prepared_file_path' in locals() and prepared_file_path != temp_file_path:
-                files_to_cleanup.append(prepared_file_path)
-            cleanup_temp_files(files_to_cleanup)
-            raise
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Analysis failed for file {request.file_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis failed: {str(e)}"
-        )
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "Synchronous analysis endpoint deprecated",
+            "message": "Use /async endpoint for reliable analysis with streaming support",
+            "migration_guide": {
+                "old_endpoint": "POST /api/v1/analyze/",
+                "new_endpoint": "POST /api/v1/analyze/async",
+                "new_flow": [
+                    "1. Submit analysis request to /async endpoint",
+                    "2. Receive task_id in response",
+                    "3. Poll /api/v1/tasks/{task_id} for progress",
+                    "4. Retrieve results when completed"
+                ]
+            }
+        }
+    )
 
 
 @router.post("/async", response_model=AsyncAnalysisResponse)
@@ -167,14 +105,80 @@ async def analyze_check_async_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Start asynchronous check analysis.
+    Start asynchronous check analysis with streaming support.
     
-    This endpoint immediately returns a task ID and processes the analysis in the background.
-    Use the returned status_url to poll for completion status.
+    This endpoint uses streaming file processing and resource monitoring to prevent
+    memory exhaustion. Returns a task ID for monitoring progress via WebSocket
+    or polling.
+    
+    Features:
+    - Streaming file download and preprocessing
+    - Memory usage monitoring with automatic termination
+    - Real-time progress updates with resource usage
+    - Support for large files up to 50MB
     """
     try:
-        # Validate file ownership and existence (reuse existing validation)
+        # Comprehensive input validation
+        if not request.file_id:
+            raise HTTPException(
+                status_code=400,
+                detail="file_id is required"
+            )
+        
+        if not request.analysis_types:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one analysis type must be specified"
+            )
+        
+        # Validate analysis types
+        valid_analysis_types = {"forensics", "ocr", "rules"}
+        invalid_types = set(request.analysis_types) - valid_analysis_types
+        if invalid_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid analysis types: {list(invalid_types)}. Valid types: {list(valid_analysis_types)}"
+            )
+        
+        # Validate page number for PDFs
+        if request.page_number is not None and request.page_number < 1:
+            raise HTTPException(
+                status_code=400,
+                detail="page_number must be >= 1"
+            )
+        
+        # Validate file ownership and existence with resource checking
         file_record = await _get_user_file(request.file_id, current_user.id, db)
+        
+        # Check file size limits before processing
+        file_size = getattr(file_record, 'file_size', 0) or 0
+        max_file_size = 50 * 1024 * 1024  # 50MB limit as per PRP success criteria
+        
+        if file_size > max_file_size:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "error": "File too large for streaming analysis",
+                    "file_size_mb": file_size / (1024 * 1024),
+                    "max_size_mb": max_file_size / (1024 * 1024),
+                    "recommendation": "Please upload a smaller file or contact support for large file processing"
+                }
+            )
+        
+        # Check system resources before starting analysis
+        from ...tasks.resource_monitor import SystemResourceMonitor
+        system_health = SystemResourceMonitor.check_system_health()
+        
+        if system_health["status"] == "critical":
+            logger.warning(f"System resources critical, deferring analysis: {system_health}")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "System resources temporarily unavailable",
+                    "message": "Analysis service is under high load. Please try again in a few minutes.",
+                    "retry_after": 300  # 5 minutes
+                }
+            )
         
         # Check if analysis already exists - return immediately if found
         existing_analysis = await _get_existing_analysis(request.file_id, db)
@@ -184,39 +188,49 @@ async def analyze_check_async_endpoint(
                 task_id="completed",
                 status="completed",
                 estimated_duration=0,
-                status_url=f"/api/v1/tasks/completed",
+                status_url="/api/v1/tasks/completed",
                 result_url=f"/api/v1/analyze/{existing_analysis.id}"
             )
         
-        # Import Celery task
-        from ...tasks.analysis_tasks import analyze_check_async
+        # Calculate estimated duration based on file size and analysis types
+        base_duration = 60  # Base 1 minute
+        size_factor = min(2.0, file_size / (10 * 1024 * 1024))  # Up to 2x for files >10MB
+        type_factor = len(request.analysis_types) * 0.5  # 0.5x per analysis type
+        estimated_duration = int(base_duration * (1 + size_factor + type_factor))
         
-        # Dispatch to background task
-        task = analyze_check_async.delay(
+        # Import new streaming Celery task
+        from ...tasks.analysis_tasks import analyze_check_streaming
+        
+        # Dispatch to streaming background task
+        task = analyze_check_streaming.delay(
             file_id=request.file_id,
             analysis_types=request.analysis_types,
             page_number=request.page_number or 1
         )
         
-        # Create task status record
+        # Create enhanced task status record
         task_status = TaskStatus(
             task_id=task.id,
             file_id=request.file_id,
             user_id=current_user.id,
             status=TaskStatusEnum.PENDING,
             progress=0.0,
-            estimated_duration=180,
+            estimated_duration=estimated_duration,
             retry_count=0
         )
         db.add(task_status)
         await db.commit()
         
-        logger.info(f"Started async analysis task {task.id} for file {request.file_id}")
+        logger.info(
+            f"Started streaming analysis task {task.id} for file {request.file_id} "
+            f"({file_size / (1024 * 1024):.1f}MB, {len(request.analysis_types)} analysis types, "
+            f"estimated {estimated_duration}s)"
+        )
         
         return AsyncAnalysisResponse(
             task_id=task.id,
             status="accepted",
-            estimated_duration=180,
+            estimated_duration=estimated_duration,
             status_url=f"/api/v1/tasks/{task.id}",
             result_url=None  # Will be available once task completes
         )
@@ -224,10 +238,10 @@ async def analyze_check_async_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to start async analysis for file {request.file_id}: {str(e)}")
+        logger.error(f"Failed to start streaming analysis for file {request.file_id}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to start analysis: {str(e)}"
+            detail=f"Failed to start streaming analysis: {str(e)}"
         )
 
 
@@ -406,86 +420,8 @@ async def _get_existing_analysis(file_id: str, db: AsyncSession) -> Optional[Ana
     return result.scalar_one_or_none()
 
 
-async def _download_file_for_analysis(s3_key: str) -> str:
-    """Download file from S3 for analysis."""
-    try:
-        # Generate presigned URL for download
-        download_url = await s3_service.generate_presigned_url(s3_key)
-        
-        if not download_url:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate download URL"
-            )
-        
-        # Download file to temporary location
-        import aiohttp
-        import aiofiles
-        import tempfile
-        from pathlib import Path
-        
-        # Extract file extension from S3 key to preserve file type
-        s3_path = Path(s3_key)
-        file_extension = s3_path.suffix or '.tmp'
-        
-        # Create temporary file with correct extension
-        temp_file = tempfile.NamedTemporaryFile(suffix=file_extension, delete=False)
-        temp_path = temp_file.name
-        temp_file.close()  # Close the file handle but don't delete the file
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(download_url) as response:
-                if response.status != 200:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Failed to download file from S3"
-                    )
-                
-                # Save to temporary file
-                async with aiofiles.open(temp_path, 'wb') as f:
-                    async for chunk in response.content.iter_chunked(8192):
-                        await f.write(chunk)
-                
-                return temp_path
-                    
-    except Exception as e:
-        logger.error(f"Failed to download file {s3_key}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to download file: {str(e)}"
-        )
-
-
-async def _validate_and_preprocess_file(file_path: str, page_number: int = 1) -> str:
-    """Validate and preprocess file for analysis."""
-    try:
-        # Validate file (works for both images and PDFs)
-        validation_result = validate_file_for_analysis(file_path)
-        
-        if not validation_result.get('valid', False):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file for analysis"
-            )
-        
-        # Prepare file for analysis (converts PDF to image if needed)
-        prepared_path = prepare_file_for_analysis(file_path, page_number=page_number)
-        
-        return prepared_path
-        
-    except (FileValidationError, FileProcessingError) as e:
-        logger.error(f"File preprocessing failed: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"File preprocessing failed: {str(e)}"
-        )
-    except Exception as e:
-        logger.error(f"File preprocessing failed: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"File preprocessing failed: {str(e)}"
-        )
-
+# Removed helper functions - only used by deprecated sync endpoint
+# These functions have been replaced by streaming equivalents
 
 async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> ComprehensiveAnalysisResult:
     """Run comprehensive analysis on the image."""

@@ -52,11 +52,12 @@ export default function UploadPage() {
         throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
       }
 
-      // Start analysis
-      const analysisResponse = await fetch('/api/analyze', {
+      // Start async analysis using the new streaming endpoint
+      const analysisResponse = await fetch('/api/analyze/async', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ 
           file_id: fileId,
@@ -66,35 +67,95 @@ export default function UploadPage() {
 
       if (!analysisResponse.ok) {
         const errorData = await analysisResponse.json().catch(() => ({ error: 'Analysis failed' }));
-        throw new Error(errorData.error || 'Analysis failed');
+        throw new Error(errorData.message || errorData.error || 'Analysis failed');
       }
 
       const analysisResult = await analysisResponse.json();
-      setAnalysisId(analysisResult.analysis_id);
-
-      // Simulate analysis progress
-      const progressInterval = setInterval(() => {
-        setAnalysisProgress(prev => {
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return 95;
-          }
-          return prev + Math.random() * 15;
-        });
-      }, 500);
-
-      // Wait a moment to simulate processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
       
-      clearInterval(progressInterval);
-      setAnalysisProgress(100);
-      setIsAnalyzing(false);
-      setAnalysisComplete(true);
+      // If analysis already exists, redirect immediately
+      if (analysisResult.status === 'completed') {
+        setAnalysisProgress(100);
+        setIsAnalyzing(false);
+        setAnalysisComplete(true);
+        setAnalysisId(analysisResult.result_url?.split('/').pop());
+        
+        setTimeout(() => {
+          router.push(analysisResult.result_url || `${ROUTES.ANALYSIS}/${analysisResult.result_url?.split('/').pop()}`);
+        }, 1000);
+        return;
+      }
 
-      // Redirect to analysis results after a brief delay
-      setTimeout(() => {
-        router.push(`${ROUTES.ANALYSIS}/${analysisResult.analysis_id}`);
+      const taskId = analysisResult.task_id;
+      
+      // Poll for task progress using the new streaming progress tracking
+      const pollProgress = async () => {
+        try {
+          const statusResponse = await fetch(`/api/tasks/${taskId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (!statusResponse.ok) {
+            throw new Error('Failed to get task status');
+          }
+          
+          const statusData = await statusResponse.json();
+          
+          // Update progress based on task status
+          if (statusData.progress !== undefined) {
+            setAnalysisProgress(Math.round(statusData.progress * 100));
+          }
+          
+          // Handle different task states
+          if (statusData.status === 'success' || statusData.status === 'completed') {
+            setAnalysisProgress(100);
+            setIsAnalyzing(false);
+            setAnalysisComplete(true);
+            
+            // Get the analysis result ID from the task result
+            const resultId = statusData.result_id || statusData.result?.result_id;
+            setAnalysisId(resultId);
+            
+            setTimeout(() => {
+              router.push(`${ROUTES.ANALYSIS}/${resultId}`);
+            }, 2000);
+            
+            return true; // Stop polling
+          } else if (statusData.status === 'failure' || statusData.status === 'retry') {
+            throw new Error(statusData.error_message || 'Analysis failed');
+          }
+          
+          return false; // Continue polling
+        } catch (error) {
+          console.error('Error polling task status:', error);
+          throw error;
+        }
+      };
+      
+      // Start polling every 2 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const shouldStop = await pollProgress();
+          if (shouldStop) {
+            clearInterval(pollInterval);
+          }
+        } catch (error) {
+          clearInterval(pollInterval);
+          throw error;
+        }
       }, 2000);
+      
+      // Initial poll
+      try {
+        const shouldStop = await pollProgress();
+        if (shouldStop) {
+          clearInterval(pollInterval);
+        }
+      } catch (error) {
+        clearInterval(pollInterval);
+        throw error;
+      }
 
     } catch (error) {
       console.error('Analysis failed:', error);

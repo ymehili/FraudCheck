@@ -184,7 +184,7 @@ def _analyze_edge_continuity_worker(edges) -> Dict[str, Any]:
         
         # Calculate edge continuity metrics
         total_regions = len(regions)
-        avg_region_size = np.mean([region.area for region in regions]) if regions else 0
+        avg_region_size = float(np.mean([region.area for region in regions])) if regions else 0.0
         
         # Detect broken edges that might indicate tampering
         broken_edges = sum(1 for region in regions if region.area < 10)
@@ -193,11 +193,11 @@ def _analyze_edge_continuity_worker(edges) -> Dict[str, Any]:
         continuity_ratio = 1.0 - (broken_edges / max(total_regions, 1))
         
         return {
-            'score': continuity_ratio,
-            'total_regions': total_regions,
+            'score': float(continuity_ratio),
+            'total_regions': int(total_regions),
             'avg_region_size': float(avg_region_size),
-            'broken_edges': broken_edges,
-            'continuity_ratio': continuity_ratio
+            'broken_edges': int(broken_edges),
+            'continuity_ratio': float(continuity_ratio)
         }
         
     except Exception as e:
@@ -213,13 +213,13 @@ def _analyze_edge_sharpness_worker(gray) -> Dict[str, Any]:
         
         # Apply Laplacian filter to detect sharpness
         laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-        sharpness_variance = np.var(laplacian)
+        sharpness_variance = float(np.var(laplacian))
         
         # Normalize sharpness score
         sharpness_score = min(1.0, sharpness_variance / 1000.0)
         
         return {
-            'score': sharpness_score,
+            'score': float(sharpness_score),
             'variance': float(sharpness_variance),
             'mean_sharpness': float(np.mean(np.abs(laplacian)))
         }
@@ -267,7 +267,7 @@ def _detect_cloned_regions_worker(gray) -> Dict[str, Any]:
                         if comparison_count >= max_comparisons_per_block:
                             break
                         other_block = gray[ii:ii+block_size, jj:jj+block_size]
-                        correlation = np.corrcoef(block.flat, other_block.flat)[0, 1]
+                        correlation = float(np.corrcoef(block.flat, other_block.flat)[0, 1])
                         if not np.isnan(correlation):
                             correlations.append(correlation)
                         comparison_count += 1
@@ -279,9 +279,9 @@ def _detect_cloned_regions_worker(gray) -> Dict[str, Any]:
         cloning_score = len(high_correlations) / max(len(correlations), 1)
         
         return {
-            'score': cloning_score,
-            'high_correlations': len(high_correlations),
-            'total_comparisons': len(correlations),
+            'score': float(cloning_score),
+            'high_correlations': int(len(high_correlations)),
+            'total_comparisons': int(len(correlations)),
             'max_correlation': float(max(correlations)) if correlations else 0.0
         }
         
@@ -314,14 +314,14 @@ def _detect_jpeg_artifacts_worker(gray) -> Dict[str, Any]:
                 artifacts.append(artifact_measure)
         
         # Calculate artifact score
-        avg_artifact = np.mean(artifacts) if artifacts else 0.0
+        avg_artifact = float(np.mean(artifacts)) if artifacts else 0.0
         artifact_score = min(1.0, avg_artifact / 10.0)
         
         return {
-            'score': artifact_score,
+            'score': float(artifact_score),
             'avg_artifact_level': float(avg_artifact),
             'artifact_variance': float(np.var(artifacts)) if artifacts else 0.0,
-            'blocks_analyzed': len(artifacts)
+            'blocks_analyzed': int(len(artifacts))
         }
         
     except Exception as e:
@@ -346,17 +346,17 @@ def _detect_compression_inconsistencies_worker(image) -> Dict[str, Any]:
                 
                 # Calculate local quality measure
                 gray_region = rgb2gray(region)
-                quality = np.var(gray_region)
+                quality = float(np.var(gray_region))
                 quality_measures.append(quality)
         
         # Check for inconsistencies
-        quality_std = np.std(quality_measures) if quality_measures else 0.0
+        quality_std = float(np.std(quality_measures)) if quality_measures else 0.0
         inconsistency_score = min(1.0, quality_std / 100.0)
         
         return {
-            'score': inconsistency_score,
+            'score': float(inconsistency_score),
             'quality_variance': float(quality_std),
-            'regions_analyzed': len(quality_measures),
+            'regions_analyzed': int(len(quality_measures)),
             'avg_quality': float(np.mean(quality_measures)) if quality_measures else 0.0
         }
         
@@ -380,14 +380,14 @@ def _detect_recompression_patterns_worker(gray) -> Dict[str, Any]:
         
         # Analyze frequency distribution
         freq_profile = f_magnitude[center_h-20:center_h+20, center_w-20:center_w+20]
-        recompression_indicator = np.std(freq_profile)
+        recompression_indicator = float(np.std(freq_profile))
         
         recompression_score = min(1.0, recompression_indicator / 10000.0)
         
         return {
-            'score': recompression_score,
+            'score': float(recompression_score),
             'frequency_std': float(recompression_indicator),
-            'analysis_region_shape': freq_profile.shape
+            'analysis_region_shape': list(freq_profile.shape)
         }
         
     except Exception as e:
@@ -421,13 +421,13 @@ def _analyze_block_artifacts_worker(gray) -> Dict[str, Any]:
             block_boundaries.append(boundary_strength)
         
         # Calculate block artifact score
-        avg_boundary_strength = np.mean(block_boundaries) if block_boundaries else 0.0
+        avg_boundary_strength = float(np.mean(block_boundaries)) if block_boundaries else 0.0
         block_artifact_score = min(1.0, avg_boundary_strength / 50.0)
         
         return {
-            'score': block_artifact_score,
+            'score': float(block_artifact_score),
             'avg_boundary_strength': float(avg_boundary_strength),
-            'boundaries_analyzed': len(block_boundaries)
+            'boundaries_analyzed': int(len(block_boundaries))
         }
         
     except Exception as e:
@@ -507,17 +507,17 @@ def _analyze_font_characteristics_worker(gray, text_regions: List[Dict[str, Any]
             stroke_widths = [c['stroke_width'] for c in characteristics]
             densities = [c['text_density'] for c in characteristics]
             
-            stroke_consistency = 1.0 - (np.std(stroke_widths) / max(np.mean(stroke_widths), 0.1))
-            density_consistency = 1.0 - (np.std(densities) / max(np.mean(densities), 0.1))
+            stroke_consistency = 1.0 - (float(np.std(stroke_widths)) / max(float(np.mean(stroke_widths)), 0.1))
+            density_consistency = 1.0 - (float(np.std(densities)) / max(float(np.mean(densities)), 0.1))
             
             consistency_score = (stroke_consistency + density_consistency) / 2.0
         else:
             consistency_score = 1.0
         
         return {
-            'consistency_score': max(0.0, min(1.0, consistency_score)),
+            'consistency_score': float(max(0.0, min(1.0, consistency_score))),
             'characteristics': characteristics,
-            'regions_analyzed': len(characteristics)
+            'regions_analyzed': int(len(characteristics))
         }
         
     except Exception as e:
@@ -557,11 +557,11 @@ def _detect_font_inconsistencies_worker(font_characteristics: Dict[str, Any]) ->
         
         # Analyze stroke width variations
         stroke_widths = [c['stroke_width'] for c in characteristics]
-        stroke_cv = np.std(stroke_widths) / max(np.mean(stroke_widths), 0.1)
+        stroke_cv = float(np.std(stroke_widths)) / max(float(np.mean(stroke_widths)), 0.1)
         
         # Analyze density variations
         densities = [c['text_density'] for c in characteristics]
-        density_cv = np.std(densities) / max(np.mean(densities), 0.1)
+        density_cv = float(np.std(densities)) / max(float(np.mean(densities)), 0.1)
         
         # Calculate penalty for inconsistencies
         inconsistency_penalty = min(1.0, (stroke_cv + density_cv) / 2.0)
@@ -573,7 +573,7 @@ def _detect_font_inconsistencies_worker(font_characteristics: Dict[str, Any]) ->
             inconsistencies.append('High text density variation')
         
         return {
-            'penalty': inconsistency_penalty,
+            'penalty': float(inconsistency_penalty),
             'inconsistencies': inconsistencies,
             'stroke_cv': float(stroke_cv),
             'density_cv': float(density_cv)
@@ -596,7 +596,7 @@ def _analyze_text_alignment_worker(gray, text_regions: List[Dict[str, Any]]) -> 
         y_coords = [region['bbox'][1] for region in text_regions]
         
         # Analyze alignment
-        y_std = np.std(y_coords)
+        y_std = float(np.std(y_coords))
         alignment_score = max(0.0, 1.0 - (y_std / 100.0))  # Normalize by expected variation
         
         # Analyze spacing
@@ -610,7 +610,7 @@ def _analyze_text_alignment_worker(gray, text_regions: List[Dict[str, Any]]) -> 
                 spacing = curr_top - prev_bottom
                 spacings.append(spacing)
             
-            spacing_std = np.std(spacings) if spacings else 0.0
+            spacing_std = float(np.std(spacings)) if spacings else 0.0
             spacing_score = max(0.0, 1.0 - (spacing_std / 50.0))
         else:
             spacing_score = 1.0
@@ -618,9 +618,9 @@ def _analyze_text_alignment_worker(gray, text_regions: List[Dict[str, Any]]) -> 
         overall_score = (alignment_score + spacing_score) / 2.0
         
         return {
-            'score': overall_score,
-            'alignment_score': alignment_score,
-            'spacing_score': spacing_score,
+            'score': float(overall_score),
+            'alignment_score': float(alignment_score),
+            'spacing_score': float(spacing_score),
             'y_std': float(y_std),
             'spacing_std': float(spacing_std) if 'spacing_std' in locals() else 0.0
         }

@@ -4,6 +4,7 @@ python-multipart
 sqlalchemy
 asyncpg
 aiosqlite
+psycopg2-binary
 greenlet
 alembic
 pydantic
@@ -36,3 +37,4 @@ python-magic
 celery[redis]
 redis
 flower
+psutil

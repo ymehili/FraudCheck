@@ -1,8 +1,6 @@
 #!/bin/bash
-"""
-Database Initialization Script for CheckGuard
-This script waits for the database to be ready and runs initial setup
-"""
+# Database Initialization Script for CheckGuard
+# This script waits for the database to be ready and runs initial setup
 
 set -e
 
