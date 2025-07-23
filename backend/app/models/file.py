@@ -9,6 +9,7 @@ from ..database import Base
 if TYPE_CHECKING:
     from .user import User
     from .analysis import AnalysisResult
+    from .task_status import TaskStatus
 
 
 class FileRecord(Base):
@@ -31,6 +32,9 @@ class FileRecord(Base):
     user: Mapped["User"] = relationship("User", back_populates="files")
     analysis_results: Mapped[List["AnalysisResult"]] = relationship(
         "AnalysisResult", back_populates="file"
+    )
+    task_statuses: Mapped[List["TaskStatus"]] = relationship(
+        "TaskStatus", back_populates="file"
     )
     
     def __init__(self, **kwargs):

@@ -33,3 +33,6 @@ PyPDF2
 pdf2image
 pymupdf
 python-magic
+celery[redis]
+redis
+flower

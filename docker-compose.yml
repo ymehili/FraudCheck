@@ -91,6 +91,57 @@ services:
     networks:
       - checkguard-network
 
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkguard-celery-worker
+    command: python celery_worker.py
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://checkguard:checkguard@postgres:5432/checkguard
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    env_file:
+      - .env.development
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - checkguard-network
+
+  # Flower Monitoring (Optional)
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkguard-flower
+    command: celery -A app.tasks.celery_app flower --port=5555 --broker=redis://redis:6379/0 --basic_auth=admin:admin
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    env_file:
+      - .env.development
+    depends_on:
+      - redis
+      - celery-worker
+    restart: unless-stopped
+    networks:
+      - checkguard-network
+
   # Frontend Application
   frontend:
     build:

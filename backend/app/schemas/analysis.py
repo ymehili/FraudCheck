@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from enum import Enum
 
 
 class ForensicsResult(BaseModel):
@@ -116,3 +117,50 @@ class AnalysisError(BaseModel):
     message: str
     details: Optional[Dict[str, Any]] = None
     timestamp: datetime
+
+
+# Async Task Processing Schemas
+
+class TaskStatusEnum(str, Enum):
+    """Enum for task status values in API responses"""
+    PENDING = "pending"
+    PROCESSING = "processing" 
+    SUCCESS = "success"
+    FAILURE = "failure"
+    RETRY = "retry"
+
+
+class AsyncAnalysisRequest(AnalysisRequest):
+    """Schema for async analysis request"""
+    webhook_url: Optional[str] = None  # Optional progress webhooks
+
+
+class AsyncAnalysisResponse(BaseModel):
+    """Schema for async analysis response"""
+    task_id: str
+    status: str = "accepted"
+    estimated_duration: int = 180  # seconds
+    status_url: str
+    result_url: Optional[str] = None
+
+
+class TaskStatusResponse(BaseModel):
+    """Schema for task status response"""
+    task_id: str
+    status: TaskStatusEnum
+    progress: float
+    file_id: str
+    created_at: datetime
+    updated_at: datetime
+    estimated_duration: int
+    error_message: Optional[str] = None
+    result_id: Optional[str] = None
+    result_url: Optional[str] = None
+
+
+class TaskResultResponse(BaseModel):
+    """Schema for task result response when completed"""
+    task_id: str
+    status: TaskStatusEnum
+    result: Optional[AnalysisResponse] = None
+    error_message: Optional[str] = None

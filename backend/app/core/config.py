@@ -21,6 +21,20 @@ class Settings(BaseSettings):
     # Gemini API
     GEMINI_API_KEY: str
     
+    # Redis Configuration
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    
+    # Celery Configuration
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
+    
+    # Task Configuration
+    TASK_SOFT_TIME_LIMIT: int = 6000  # 100 minutes
+    TASK_TIME_LIMIT: int = 7200  # 2 hours hard limit
+    BROKER_VISIBILITY_TIMEOUT: int = 7200  # 2 hours for long tasks
+    
     @field_validator('DATABASE_URL', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 
                      'S3_BUCKET_NAME', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 
                      'GEMINI_API_KEY', mode='before')
@@ -65,6 +79,20 @@ class Settings(BaseSettings):
         return v
     
     model_config = ConfigDict(env_file=".env")
+    
+    @property
+    def celery_broker_url(self) -> str:
+        """Build Celery broker URL from Redis configuration."""
+        if self.CELERY_BROKER_URL:
+            return self.CELERY_BROKER_URL
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+    
+    @property
+    def celery_result_backend(self) -> str:
+        """Build Celery result backend URL from Redis configuration."""
+        if self.CELERY_RESULT_BACKEND:
+            return self.CELERY_RESULT_BACKEND
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB + 1}"
 
 
 settings = Settings()

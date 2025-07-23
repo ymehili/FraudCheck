@@ -8,6 +8,7 @@ from ..database import Base
 
 if TYPE_CHECKING:
     from .file import FileRecord
+    from .task_status import TaskStatus
 
 
 class User(Base):
@@ -25,4 +26,9 @@ class User(Base):
     # Relationship with files
     files: Mapped[List["FileRecord"]] = relationship(
         "FileRecord", back_populates="user", cascade="all, delete-orphan"
+    )
+    
+    # Relationship with task statuses
+    task_statuses: Mapped[List["TaskStatus"]] = relationship(
+        "TaskStatus", back_populates="user", cascade="all, delete-orphan"
     )

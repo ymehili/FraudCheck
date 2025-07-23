@@ -13,6 +13,7 @@ from ...database import get_db
 from ...models.user import User
 from ...models.file import FileRecord
 from ...models.analysis import AnalysisResult
+from ...models.task_status import TaskStatus, TaskStatusEnum
 from ...schemas.analysis import (
     AnalysisRequest, 
     AnalysisResponse, 
@@ -20,7 +21,9 @@ from ...schemas.analysis import (
     AnalysisListResponse,
     ForensicsResult,
     OCRResult,
-    RuleEngineResult
+    RuleEngineResult,
+    AsyncAnalysisRequest,
+    AsyncAnalysisResponse
 )
 from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
@@ -154,6 +157,77 @@ async def analyze_check(
         raise HTTPException(
             status_code=500,
             detail=f"Analysis failed: {str(e)}"
+        )
+
+
+@router.post("/async", response_model=AsyncAnalysisResponse)
+async def analyze_check_async_endpoint(
+    request: AsyncAnalysisRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start asynchronous check analysis.
+    
+    This endpoint immediately returns a task ID and processes the analysis in the background.
+    Use the returned status_url to poll for completion status.
+    """
+    try:
+        # Validate file ownership and existence (reuse existing validation)
+        file_record = await _get_user_file(request.file_id, current_user.id, db)
+        
+        # Check if analysis already exists - return immediately if found
+        existing_analysis = await _get_existing_analysis(request.file_id, db)
+        if existing_analysis:
+            logger.info(f"Returning existing analysis for file {request.file_id}")
+            return AsyncAnalysisResponse(
+                task_id="completed",
+                status="completed",
+                estimated_duration=0,
+                status_url=f"/api/v1/tasks/completed",
+                result_url=f"/api/v1/analyze/{existing_analysis.id}"
+            )
+        
+        # Import Celery task
+        from ...tasks.analysis_tasks import analyze_check_async
+        
+        # Dispatch to background task
+        task = analyze_check_async.delay(
+            file_id=request.file_id,
+            analysis_types=request.analysis_types,
+            page_number=request.page_number or 1
+        )
+        
+        # Create task status record
+        task_status = TaskStatus(
+            task_id=task.id,
+            file_id=request.file_id,
+            user_id=current_user.id,
+            status=TaskStatusEnum.PENDING,
+            progress=0.0,
+            estimated_duration=180,
+            retry_count=0
+        )
+        db.add(task_status)
+        await db.commit()
+        
+        logger.info(f"Started async analysis task {task.id} for file {request.file_id}")
+        
+        return AsyncAnalysisResponse(
+            task_id=task.id,
+            status="accepted",
+            estimated_duration=180,
+            status_url=f"/api/v1/tasks/{task.id}",
+            result_url=None  # Will be available once task completes
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start async analysis for file {request.file_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start analysis: {str(e)}"
         )
 
 
