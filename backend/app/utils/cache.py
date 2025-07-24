@@ -2,25 +2,32 @@
 Simple in-memory cache utility for dashboard data.
 """
 
-import asyncio
-from datetime import datetime, timedelta
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Optional, Callable, TYPE_CHECKING
 import json
 import hashlib
 import logging
+from .redis_cache import RedisConnection, serialize_value, deserialize_value
+
+if TYPE_CHECKING:
+    import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
 
-class MemoryCache:
-    """Simple in-memory cache with TTL support."""
+class DistributedCache:
+    """Redis-backed distributed cache with TTL support."""
     
     def __init__(self):
-        self._cache: Dict[str, Dict[str, Any]] = {}
-        self._lock = asyncio.Lock()
+        self._redis: Optional["redis.Redis"] = None
+    
+    async def _get_redis(self):
+        """Get Redis client instance."""
+        if self._redis is None:
+            self._redis = await RedisConnection.get_redis_client()
+        return self._redis
     
     def _generate_key(self, *args, **kwargs) -> str:
-        """Generate cache key from arguments."""
+        """Generate cache key from arguments - preserves existing logic."""
         key_data = {
             'args': args,
             'kwargs': sorted(kwargs.items()) if kwargs else {}
@@ -29,54 +36,49 @@ class MemoryCache:
         return hashlib.md5(key_str.encode()).hexdigest()
     
     async def get(self, key: str) -> Optional[Any]:
-        """Get value from cache."""
-        async with self._lock:
-            if key in self._cache:
-                entry = self._cache[key]
-                if datetime.utcnow() < entry['expires_at']:
-                    return entry['value']
-                else:
-                    # Expired entry
-                    del self._cache[key]
-        return None
+        """Get value from distributed cache."""
+        try:
+            redis_client = await self._get_redis()
+            value = await redis_client.get(key)
+            if value is None:
+                return None
+            return deserialize_value(value)
+        except Exception as e:
+            logger.error(f"Cache get error for key {key}: {e}")
+            return None
     
     async def set(self, key: str, value: Any, ttl_seconds: int = 300):
-        """Set value in cache with TTL."""
-        async with self._lock:
-            expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
-            self._cache[key] = {
-                'value': value,
-                'expires_at': expires_at
-            }
+        """Set value in distributed cache with TTL."""
+        try:
+            redis_client = await self._get_redis()
+            serialized_value = serialize_value(value)
+            await redis_client.setex(key, ttl_seconds, serialized_value)
+        except Exception as e:
+            logger.error(f"Cache set error for key {key}: {e}")
     
     async def delete(self, key: str):
-        """Delete key from cache."""
-        async with self._lock:
-            if key in self._cache:
-                del self._cache[key]
+        """Delete key from distributed cache."""
+        try:
+            redis_client = await self._get_redis()
+            await redis_client.delete(key)
+        except Exception as e:
+            logger.error(f"Cache delete error for key {key}: {e}")
     
     async def clear(self):
         """Clear all cache entries."""
-        async with self._lock:
-            self._cache.clear()
+        try:
+            redis_client = await self._get_redis()
+            await redis_client.flushdb()
+        except Exception as e:
+            logger.error(f"Cache clear error: {e}")
     
     async def cleanup_expired(self):
-        """Remove expired entries."""
-        async with self._lock:
-            now = datetime.utcnow()
-            expired_keys = [
-                key for key, entry in self._cache.items()
-                if now >= entry['expires_at']
-            ]
-            for key in expired_keys:
-                del self._cache[key]
-            
-            if expired_keys:
-                logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
+        """No-op: Redis handles TTL automatically."""
+        pass  # Redis automatically handles expired keys
 
 
 # Global cache instance
-_cache_instance = MemoryCache()
+_cache_instance = DistributedCache()
 
 
 def cached(ttl_seconds: int = 300):
@@ -102,7 +104,7 @@ def cached(ttl_seconds: int = 300):
     return decorator
 
 
-async def get_cache_instance() -> MemoryCache:
+async def get_cache_instance() -> DistributedCache:
     """Get the global cache instance."""
     return _cache_instance
 
@@ -115,17 +117,12 @@ async def invalidate_dashboard_cache(user_id: str):
     logger.info(f"Invalidated dashboard cache for user {user_id}")
 
 
-# Cleanup task
+# Cleanup task (no-op for Redis-backed cache)
 async def start_cache_cleanup_task():
-    """Start background task to clean up expired cache entries."""
-    async def cleanup_loop():
-        while True:
-            try:
-                await _cache_instance.cleanup_expired()
-                await asyncio.sleep(60)  # Run every minute
-            except Exception as e:
-                logger.error(f"Cache cleanup error: {e}")
-                await asyncio.sleep(60)
+    """Start background task to clean up expired cache entries.
     
-    # Start the cleanup task
-    asyncio.create_task(cleanup_loop())
+    No-op for Redis-backed cache since Redis handles TTL automatically.
+    Kept for backward compatibility.
+    """
+    logger.info("Cache cleanup task: No-op for Redis-backed cache (TTL handled automatically)")
+    pass
