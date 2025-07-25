@@ -73,15 +73,6 @@ class Settings(BaseSettings):
     # Additional properties for test compatibility
     project_name: str = "CheckGuard AI"
     debug: bool = False
-    secret_key: str
-    algorithm: str = "HS256"  # JWT algorithm
-    
-    @field_validator('secret_key', mode='before')
-    @classmethod
-    def validate_secret_key(cls, v):
-        if not v or v in ['', 'test', 'test-secret-key-for-development', 'changeme', 'default']:
-            raise ValueError('secret_key must be set in environment variables and cannot be empty or use default values')
-        return v
     
     model_config = ConfigDict(env_file=".env")
     
