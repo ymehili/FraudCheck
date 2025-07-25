@@ -1,6 +1,5 @@
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
-from datetime import timezone
 from typing import Dict, Any
 import httpx
 from .config import settings

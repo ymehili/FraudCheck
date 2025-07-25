@@ -3,6 +3,8 @@ Streaming file processing utilities for memory-bounded analysis.
 
 This module provides streaming file validation, chunked processing, and progress
 tracking for large files to prevent memory exhaustion during analysis.
+
+Security validation is handled exclusively by ClamAV daemon integration.
 """
 
 import os
@@ -61,8 +63,8 @@ async def stream_validate_file(
     """
     Stream-validate file without loading entirely into memory.
     
-    Performs incremental security validation on chunks to detect malicious
-    content patterns without memory exhaustion.
+    Performs basic file validation on chunks without memory exhaustion.
+    Security validation is handled separately by ClamAV daemon.
     
     Args:
         file_path: Path to file to validate
@@ -112,8 +114,8 @@ async def stream_validate_file(
                     remaining_header_bytes = 2048 - len(file_header)
                     file_header += chunk[:remaining_header_bytes]
                 
-                # Incremental security validation on chunk
-                await _validate_chunk_security(chunk, chunks_processed)
+                # Basic chunk validation (non-security)
+                await _validate_chunk_basic(chunk, chunks_processed)
                 
                 # Update progress if callback provided
                 if progress_callback:
@@ -157,51 +159,36 @@ async def stream_validate_file(
         raise StreamingValidationError(f"Validation failed: {str(e)}")
 
 
-async def _validate_chunk_security(chunk: bytes, chunk_number: int) -> None:
+async def _validate_chunk_basic(chunk: bytes, chunk_number: int) -> None:
     """
-    Validate chunk for security threats using incremental analysis.
+    Perform basic chunk validation (non-security checks).
+    
+    Security validation is handled exclusively by ClamAV daemon.
     
     Args:
         chunk: Bytes to validate
         chunk_number: Sequential chunk number for context
         
     Raises:
-        StreamingValidationError: If malicious content detected
+        StreamingValidationError: If basic validation fails
     """
     try:
-        # Check for malicious patterns in chunk
-        malicious_patterns = [
-            b'<script', b'javascript:', b'vbscript:', b'onload=',
-            b'<?php', b'<%', b'eval(', b'exec(', b'system(',
-            b'../../../', b'..\\..\\..\\', b'cmd.exe', b'/bin/sh'
-        ]
+        # Basic sanity checks only
+        if len(chunk) == 0:
+            raise StreamingValidationError(f"Empty chunk {chunk_number}")
         
-        chunk_lower = chunk.lower()
-        for pattern in malicious_patterns:
-            if pattern in chunk_lower:
-                raise StreamingValidationError(
-                    f"Malicious pattern detected in chunk {chunk_number}: {pattern.decode('utf-8', errors='ignore')}"
-                )
-        
-        # Check for excessive null bytes (potential padding attacks)
-        null_count = chunk.count(b'\x00')
-        if null_count > len(chunk) * 0.8:  # More than 80% null bytes
-            raise StreamingValidationError(
-                f"Suspicious null byte padding in chunk {chunk_number}"
-            )
-        
-        # Check for extremely long lines (potential buffer overflow)
+        # Check for extremely long lines (potential file corruption)
         lines = chunk.split(b'\n')
         for line in lines:
-            if len(line) > 10000:  # 10KB line limit
+            if len(line) > 50000:  # 50KB line limit (increased from security check)
                 raise StreamingValidationError(
-                    f"Suspiciously long line in chunk {chunk_number}"
+                    f"Corrupted file: extremely long line in chunk {chunk_number}"
                 )
                 
     except StreamingValidationError:
         raise
     except Exception as e:
-        logger.warning(f"Chunk security validation error: {str(e)}")
+        logger.warning(f"Chunk basic validation error: {str(e)}")
         # Don't fail on validation errors, just log them
 
 

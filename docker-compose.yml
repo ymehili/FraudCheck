@@ -62,6 +62,36 @@ services:
     networks:
       - checkguard-network
 
+  # ClamAV Daemon for malware scanning
+  clamav:
+    image: clamav/clamav:stable
+    platform: linux/amd64
+    container_name: checkguard-clamav
+    mem_limit: 4g
+    mem_reservation: 3g
+    environment:
+      - CLAMAV_NO_FRESHCLAMD=false
+      - CLAMAV_NO_CLAMD=false
+      - CLAMD_CONF_LogVerbose=yes
+      - CLAMD_CONF_DatabaseDirectory=/var/lib/clamav
+      - CLAMD_CONF_LocalSocket=/tmp/clamd.sock
+      - CLAMD_CONF_LocalSocketGroup=clamav
+      - CLAMD_CONF_LocalSocketMode=666
+      - CLAMD_CONF_FixStaleSocket=yes
+      - CLAMD_CONF_TCPSocket=3310
+    volumes:
+      - clamav_data:/var/lib/clamav
+      - clamav_socket:/tmp
+    healthcheck:
+      test: ["CMD", "test", "-S", "/tmp/clamd.sock"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 3m
+    restart: unless-stopped
+    networks:
+      - checkguard-network
+
   # Backend API
   backend:
     build:
@@ -75,17 +105,21 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
       - REDIS_URL=redis://redis:6379/0
       - INIT_DB=true
+      - CLAMAV_SOCKET_PATH=/tmp/clamd.sock
     env_file:
       - .env.development
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads
+      - clamav_socket:/tmp
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       localstack:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -105,17 +139,21 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - CLAMAV_SOCKET_PATH=/tmp/clamd.sock
     env_file:
       - .env.development
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads
+      - clamav_socket:/tmp
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       localstack:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -195,6 +233,10 @@ volumes:
   localstack_data:
     driver: local
   backend_uploads:
+    driver: local
+  clamav_data:
+    driver: local
+  clamav_socket:
     driver: local
 
 networks:

@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     CONTENT_VALIDATION_ENABLED: bool = True
     SECURE_FILE_NAMING: bool = True
     
+    # ClamAV Daemon Settings
+    CLAMAV_SOCKET_PATH: str = "/tmp/clamd.sock"
+    CLAMAV_TIMEOUT: int = 30
+    CLAMAV_ENABLED: bool = True
+    
     # File Type Specific Limits
     MAX_IMAGE_SIZE: int = 50 * 1024 * 1024  # 50MB for images
     MAX_PDF_SIZE: int = 20 * 1024 * 1024    # 20MB for PDFs

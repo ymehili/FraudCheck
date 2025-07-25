@@ -38,3 +38,4 @@ celery[redis]
 redis
 flower
 psutil
+python-clamd>=1.0.2

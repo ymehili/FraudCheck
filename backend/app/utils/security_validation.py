@@ -17,7 +17,7 @@ class SecurityValidationError(Exception):
 
 
 class FileSecurityValidator:
-    """Comprehensive file security validation using content analysis."""
+    """Basic file security validation using content analysis."""
     
     # Magic number signatures for allowed file types
     ALLOWED_SIGNATURES = {
@@ -47,23 +47,6 @@ class FileSecurityValidator:
         'application/pdf': 20 * 1024 * 1024,  # 20MB
     }
     
-    # Dangerous file patterns to block
-    DANGEROUS_PATTERNS = [
-        # Executable files
-        b'MZ',  # PE/COFF executables
-        b'\x7fELF',  # ELF executables
-        b'\xCA\xFE\xBA\xBE',  # Java class files
-        b'\xFE\xED\xFA\xCE',  # Mach-O executables
-        # Script files
-        b'#!/',  # Shell scripts
-        b'<?php',  # PHP scripts
-        b'<script',  # HTML/JS scripts (case insensitive handled separately)
-        # Archive files that could contain malware
-        b'PK\x03\x04',  # ZIP files
-        b'Rar!',  # RAR files
-        b'\x1f\x8b',  # GZIP files
-    ]
-    
     def __init__(self):
         """Initialize the security validator."""
         try:
@@ -76,7 +59,7 @@ class FileSecurityValidator:
 
     async def validate_file_content(self, file_content: bytes, filename: str, declared_mime_type: str) -> Dict[str, Any]:
         """
-        Validate file content using multiple security checks.
+        Validate file content using basic security checks only.
         
         Args:
             file_content: Raw file content bytes
@@ -101,26 +84,8 @@ class FileSecurityValidator:
         # Validate MIME type consistency
         self._validate_mime_type_consistency(declared_mime_type, actual_mime_type, filename)
         
-        # Check for dangerous content patterns
-        self._check_dangerous_patterns(file_content, filename)
-        
         # Perform deep content validation
         validation_result = await self._deep_content_validation(file_content, actual_mime_type, filename)
-        
-        # Scan for malware
-        try:
-            from .malware_scanner import scan_file_for_malware, MalwareDetected
-            malware_scan_result = await scan_file_for_malware(file_content, filename)
-            validation_result['malware_scan'] = malware_scan_result
-        except MalwareDetected as e:
-            raise SecurityValidationError(f"Malware detected in {filename}: {str(e)}")
-        except Exception as e:
-            logger.warning(f"Malware scan failed for {filename}: {str(e)}")
-            validation_result['malware_scan'] = {
-                'scanned': False,
-                'error': str(e),
-                'clean': None
-            }
         
         # Calculate file hash for integrity tracking
         file_hash = hashlib.sha256(file_content).hexdigest()
@@ -227,39 +192,6 @@ class FileSecurityValidator:
                 f"Unsupported MIME type: {actual}. Allowed types: {', '.join(allowed_types)}"
             )
 
-    def _check_dangerous_patterns(self, file_content: bytes, filename: str) -> None:
-        """Check for dangerous content patterns."""
-        # Check for executable signatures
-        for pattern in self.DANGEROUS_PATTERNS:
-            if pattern in file_content:
-                raise SecurityValidationError(
-                    f"Dangerous content pattern detected in {filename}"
-                )
-        
-        # Check for script content (case insensitive)
-        content_lower = file_content.lower()
-        dangerous_scripts = [
-            b'<script',
-            b'javascript:',
-            b'vbscript:',
-            b'onload=',
-            b'onerror=',
-            b'<?php',
-            b'<%',
-        ]
-        
-        for pattern in dangerous_scripts:
-            if pattern in content_lower:
-                raise SecurityValidationError(
-                    f"Script content detected in {filename}"
-                )
-        
-        # Check for embedded executables in images
-        if b'MZ' in file_content[100:]:  # Skip legitimate image headers
-            raise SecurityValidationError(
-                f"Embedded executable detected in {filename}"
-            )
-
     async def _deep_content_validation(self, file_content: bytes, mime_type: str, filename: str) -> Dict[str, Any]:
         """Perform deep content validation specific to file type."""
         if mime_type.startswith('image/'):
@@ -324,21 +256,6 @@ class FileSecurityValidator:
                     if page_count > 100:  # Reasonable limit
                         raise SecurityValidationError(f"PDF has too many pages: {page_count}")
                     
-                    # Check for JavaScript or other executable content
-                    for page_num, page in enumerate(pdf_reader.pages):
-                        try:
-                            text = page.extract_text().lower()
-                            dangerous_content = ['javascript', '/js', '/action', 'eval(']
-                            
-                            for dangerous in dangerous_content:
-                                if dangerous in text:
-                                    raise SecurityValidationError(
-                                        f"Potentially dangerous content in PDF page {page_num + 1}"
-                                    )
-                        except Exception:
-                            # If text extraction fails, continue
-                            pass
-                    
                     return {
                         'page_count': page_count,
                         'validation_method': 'PyPDF2'
@@ -356,7 +273,7 @@ security_validator = FileSecurityValidator()
 
 async def validate_upload_security(file: UploadFile) -> Dict[str, Any]:
     """
-    Validate uploaded file for security threats.
+    Validate uploaded file for basic security checks only.
     
     Args:
         file: FastAPI UploadFile object
@@ -377,7 +294,7 @@ async def validate_upload_security(file: UploadFile) -> Dict[str, Any]:
         if not file_content:
             raise SecurityValidationError("File is empty")
         
-        # Perform security validation
+        # Perform basic security validation only
         result = await security_validator.validate_file_content(
             file_content=file_content,
             filename=file.filename or "unknown",

@@ -207,16 +207,42 @@ class S3Service:
             )
 
     async def validate_file(self, file: UploadFile) -> dict:
-        """Validate file using comprehensive security checks."""
+        """Validate file using basic security checks and ClamAV malware scanning."""
         from ..utils.security_validation import validate_upload_security, SecurityValidationError
+        from ..utils.malware_scanner import scan_file_for_malware, MalwareDetected, MalwareScanError
         
         try:
-            # Perform comprehensive security validation
+            # Perform basic security validation (size, type, content structure)
             validation_result = await validate_upload_security(file)
             
-            logger.info(f"File validation passed for: {file.filename}")
+            # Read file content for ClamAV scanning
+            file.file.seek(0)
+            file_content = file.file.read()
+            file.file.seek(0)  # Reset for any subsequent reads
+            
+            # Perform ClamAV malware scanning directly
+            try:
+                malware_scan_result = await scan_file_for_malware(file_content, file.filename or "unknown")
+                validation_result['malware_scan'] = malware_scan_result
+            except MalwareDetected as e:
+                logger.warning(f"Malware detected in {file.filename}: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Malware detected: {str(e)}"
+                )
+            except MalwareScanError as e:
+                logger.error(f"ClamAV scan failed for {file.filename}: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Malware scanning failed: {str(e)}"
+                )
+            
+            logger.info(f"File validation and malware scan passed for: {file.filename}")
             return validation_result
             
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
         except SecurityValidationError as e:
             logger.warning(f"Security validation failed for {file.filename}: {str(e)}")
             raise HTTPException(
@@ -226,7 +252,7 @@ class S3Service:
         except Exception as e:
             logger.error(f"File validation failed: {str(e)}")
             raise HTTPException(
-                status_code=400,
+                status_code=500,
                 detail=f"File validation failed: {str(e)}"
             )
 
