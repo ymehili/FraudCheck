@@ -6,12 +6,19 @@ import warnings
 from typing import Dict, List, Any
 import logging
 
-from ..schemas.analysis import ForensicsResult
+from ..schemas.analysis import ForensicsResult, AnalysisStatusEnum
 from .executor_manager import get_forensics_executor
 from .forensics_worker import (
     detect_edge_inconsistencies_worker,
     analyze_compression_artifacts_worker,
     analyze_font_consistency_worker
+)
+from .forensics_exceptions import (
+    ForensicsAnalysisError,
+    ForensicsWarning,
+    ImageProcessingError,
+    FeatureDetectionError,
+    CompressionAnalysisError
 )
 
 # Suppress numpy warnings for division by zero and invalid values
@@ -91,6 +98,11 @@ class ForensicsEngine:
             # Compile detected anomalies
             anomalies = self._compile_anomalies(edge_analysis, compression_analysis, font_analysis)
             
+            # Extract enhanced forensics data
+            ela_analysis = compression_analysis.get('ela_analysis')
+            copy_move_regions = edge_analysis.get('cloned_regions', {}).get('copy_move_regions', [])
+            noise_analysis = edge_analysis.get('noise_analysis')
+            
             # Cleanup resources
             del image, image_rgb
             
@@ -102,12 +114,114 @@ class ForensicsEngine:
                 detected_anomalies=anomalies,
                 edge_inconsistencies=edge_analysis,
                 compression_artifacts=compression_analysis,
-                font_analysis=font_analysis
+                font_analysis=font_analysis,
+                analysis_status=AnalysisStatusEnum.SUCCESS,
+                error_details=None,
+                ela_analysis=ela_analysis,
+                copy_move_regions=copy_move_regions,
+                noise_analysis=noise_analysis
             )
             
-        except Exception as e:
+        except (ForensicsAnalysisError, CompressionAnalysisError, ImageProcessingError, 
+                FeatureDetectionError) as e:
             logger.error(f"Forensics analysis failed for {image_path}: {str(e)}")
-            raise
+            
+            # Return high-risk result for critical failures instead of masking as safe
+            return ForensicsResult(
+                edge_score=1.0,
+                compression_score=1.0,
+                font_score=1.0,
+                overall_score=1.0,  # Maximum risk for failures
+                detected_anomalies=["Critical analysis failure - high risk"],
+                edge_inconsistencies={"error": "Analysis failed"},
+                compression_artifacts={"error": "Analysis failed"},
+                font_analysis={"error": "Analysis failed"},
+                analysis_status=AnalysisStatusEnum.CRITICAL_FAILURE,
+                error_details=str(e),
+                ela_analysis=None,
+                copy_move_regions=None,
+                noise_analysis=None
+            )
+            
+        except ForensicsWarning as e:
+            logger.warning(f"Forensics analysis completed with warnings for {image_path}: {str(e)}")
+            
+            # Attempt to get partial results with reduced confidence
+            try:
+                # Re-load image for partial recovery attempt
+                image = cv2.imread(image_path)
+                if image is None:
+                    raise ValueError(f"Could not load image: {image_path}")
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                
+                edge_analysis, compression_analysis, font_analysis = await asyncio.gather(
+                    self._detect_edge_inconsistencies(image_rgb),
+                    self._analyze_compression_artifacts(image_rgb),
+                    self._analyze_font_consistency(image_rgb),
+                    return_exceptions=True
+                )
+                
+                # Use available results, with penalties for failed components
+                edge_score = edge_analysis.get('score', 0.8) if isinstance(edge_analysis, dict) else 0.8
+                compression_score = compression_analysis.get('score', 0.8) if isinstance(compression_analysis, dict) else 0.8
+                font_score = font_analysis.get('score', 0.8) if isinstance(font_analysis, dict) else 0.8
+                
+                overall_score = max(0.7, (edge_score + compression_score + font_score) / 3.0)
+                anomalies = ["Partial analysis failure - elevated risk"]
+                
+                return ForensicsResult(
+                    edge_score=edge_score,
+                    compression_score=compression_score,
+                    font_score=font_score,
+                    overall_score=overall_score,
+                    detected_anomalies=anomalies,
+                    edge_inconsistencies=edge_analysis if isinstance(edge_analysis, dict) else {"error": "Failed"},
+                    compression_artifacts=compression_analysis if isinstance(compression_analysis, dict) else {"error": "Failed"},
+                    font_analysis=font_analysis if isinstance(font_analysis, dict) else {"error": "Failed"},
+                    analysis_status=AnalysisStatusEnum.PARTIAL_FAILURE,
+                    error_details=str(e),
+                    ela_analysis=compression_analysis.get('ela_analysis') if isinstance(compression_analysis, dict) else None,
+                    copy_move_regions=edge_analysis.get('cloned_regions', {}).get('copy_move_regions', []) if isinstance(edge_analysis, dict) else None,
+                    noise_analysis=edge_analysis.get('noise_analysis') if isinstance(edge_analysis, dict) else None
+                )
+                
+            except Exception:
+                # If partial recovery fails, return critical failure
+                return ForensicsResult(
+                    edge_score=1.0,
+                    compression_score=1.0,
+                    font_score=1.0,
+                    overall_score=1.0,
+                    detected_anomalies=["Critical analysis failure - high risk"],
+                    edge_inconsistencies={"error": "Analysis failed"},
+                    compression_artifacts={"error": "Analysis failed"},
+                    font_analysis={"error": "Analysis failed"},
+                    analysis_status=AnalysisStatusEnum.CRITICAL_FAILURE,
+                    error_details=str(e),
+                    ela_analysis=None,
+                    copy_move_regions=None,
+                    noise_analysis=None
+                )
+                
+        except Exception as e:
+            logger.error(f"Unexpected error in forensics analysis for {image_path}: {str(e)}")
+            
+            # Return high-risk result for unexpected failures
+            return ForensicsResult(
+                edge_score=1.0,
+                compression_score=1.0,
+                font_score=1.0,
+                overall_score=1.0,
+                detected_anomalies=["Unexpected analysis failure - high risk"],
+                edge_inconsistencies={"error": "Unexpected failure"},
+                compression_artifacts={"error": "Unexpected failure"},
+                font_analysis={"error": "Unexpected failure"},
+                analysis_status=AnalysisStatusEnum.CRITICAL_FAILURE,
+                error_details=f"Unexpected error: {str(e)}",
+                ela_analysis=None,
+                copy_move_regions=None,
+                noise_analysis=None
+            )
     
     async def _detect_edge_inconsistencies(self, image: np.ndarray) -> Dict[str, Any]:
         """
@@ -137,9 +251,12 @@ class ForensicsEngine:
             
             return result
             
-        except Exception as e:
+        except (ForensicsAnalysisError, ImageProcessingError, FeatureDetectionError) as e:
             logger.error(f"Edge detection failed: {str(e)}")
-            return {'score': 0.0, 'error': str(e)}
+            raise ForensicsAnalysisError(f"Edge detection critical failure: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error in edge detection: {str(e)}")
+            raise ForensicsAnalysisError(f"Edge detection unexpected error: {str(e)}")
     
     async def _analyze_compression_artifacts(self, image: np.ndarray) -> Dict[str, Any]:
         """
@@ -169,9 +286,12 @@ class ForensicsEngine:
             
             return result
             
-        except Exception as e:
+        except (CompressionAnalysisError, ImageProcessingError) as e:
             logger.error(f"Compression analysis failed: {str(e)}")
-            return {'score': 0.0, 'error': str(e)}
+            raise CompressionAnalysisError(f"Compression analysis critical failure: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error in compression analysis: {str(e)}")
+            raise CompressionAnalysisError(f"Compression analysis unexpected error: {str(e)}")
     
     async def _analyze_font_consistency(self, image: np.ndarray) -> Dict[str, Any]:
         """
@@ -201,9 +321,12 @@ class ForensicsEngine:
             
             return result
             
-        except Exception as e:
+        except ForensicsAnalysisError as e:
             logger.error(f"Font analysis failed: {str(e)}")
-            return {'score': 0.0, 'error': str(e)}
+            raise ForensicsAnalysisError(f"Font analysis critical failure: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error in font analysis: {str(e)}")
+            raise ForensicsAnalysisError(f"Font analysis unexpected error: {str(e)}")
     
     
     def _compile_anomalies(self, edge_analysis: Dict[str, Any], 

@@ -4,6 +4,13 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 
+class AnalysisStatusEnum(str, Enum):
+    """Enum for forensics analysis status values"""
+    SUCCESS = "success"
+    PARTIAL_FAILURE = "partial_failure"
+    CRITICAL_FAILURE = "critical_failure"
+
+
 class ForensicsResult(BaseModel):
     """Schema for forensics analysis results"""
     edge_score: float
@@ -14,6 +21,13 @@ class ForensicsResult(BaseModel):
     edge_inconsistencies: Dict[str, Any]
     compression_artifacts: Dict[str, Any]
     font_analysis: Dict[str, Any]
+    
+    # New enhanced forensics fields
+    analysis_status: AnalysisStatusEnum = AnalysisStatusEnum.SUCCESS
+    error_details: Optional[str] = None
+    ela_analysis: Optional[Dict[str, Any]] = None
+    copy_move_regions: Optional[List[Dict[str, Any]]] = None
+    noise_analysis: Optional[Dict[str, Any]] = None
 
 
 class OCRResult(BaseModel):

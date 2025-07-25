@@ -8,6 +8,13 @@ blocking the asyncio event loop during CPU-intensive operations.
 import logging
 from typing import Dict, List, Any
 
+from .forensics_exceptions import (
+    ForensicsAnalysisError,
+    ImageProcessingError,
+    FeatureDetectionError,
+    CompressionAnalysisError
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,25 +53,30 @@ def detect_edge_inconsistencies_worker(image_data: bytes, image_shape: tuple) ->
         # Check for duplicate or cloned regions
         cloned_regions = _detect_cloned_regions_worker(gray)
         
-        # Calculate edge inconsistency score
+        # Analyze noise patterns for tampering indicators
+        noise_analysis = _analyze_noise_patterns_worker(image_data, image_shape)
+        
+        # Calculate edge inconsistency score including noise analysis
         continuity_score = edge_continuity.get('score', 0.0)
         sharpness_score = edge_sharpness.get('score', 0.0)
         cloning_score = cloned_regions.get('score', 0.0)
+        noise_score = noise_analysis.get('score', 0.0)
         
-        edge_score = (continuity_score + sharpness_score + cloning_score) / 3.0
+        edge_score = (continuity_score + sharpness_score + cloning_score + noise_score) / 4.0
         
         return {
             'score': edge_score,
             'continuity': edge_continuity,
             'sharpness': edge_sharpness,
             'cloned_regions': cloned_regions,
+            'noise_analysis': noise_analysis,
             'edge_density': float(np.sum(edges) / edges.size),
             'edge_map_shape': edges.shape
         }
         
     except Exception as e:
         logger.error(f"Edge detection worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise ForensicsAnalysisError(f"Edge detection error: {str(e)}")
 
 
 def analyze_compression_artifacts_worker(image_data: bytes, image_shape: tuple) -> Dict[str, Any]:
@@ -92,30 +104,30 @@ def analyze_compression_artifacts_worker(image_data: bytes, image_shape: tuple) 
         # Analyze JPEG compression artifacts
         jpeg_artifacts = _detect_jpeg_artifacts_worker(gray)
         
-        # Analyze compression inconsistencies
-        compression_inconsistencies = _detect_compression_inconsistencies_worker(image)
+        # Perform Error Level Analysis (ELA) for compression inconsistencies
+        ela_analysis = _perform_error_level_analysis_worker(image_data, image_shape)
         
         # Check for re-compression patterns
         recompression_patterns = _detect_recompression_patterns_worker(gray)
         
         # Calculate compression artifact score
         jpeg_score = jpeg_artifacts.get('score', 0.0)
-        inconsistency_score = compression_inconsistencies.get('score', 0.0)
+        ela_score = ela_analysis.get('score', 0.0)
         recompression_score = recompression_patterns.get('score', 0.0)
         
-        compression_score = (jpeg_score + inconsistency_score + recompression_score) / 3.0
+        compression_score = (jpeg_score + ela_score + recompression_score) / 3.0
         
         return {
             'score': compression_score,
             'jpeg_artifacts': jpeg_artifacts,
-            'inconsistencies': compression_inconsistencies,
+            'ela_analysis': ela_analysis,
             'recompression_patterns': recompression_patterns,
             'block_artifacts': _analyze_block_artifacts_worker(gray)
         }
         
     except Exception as e:
         logger.error(f"Compression analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise CompressionAnalysisError(f"Compression analysis error: {str(e)}")
 
 
 def analyze_font_consistency_worker(image_data: bytes, image_shape: tuple) -> Dict[str, Any]:
@@ -169,7 +181,139 @@ def analyze_font_consistency_worker(image_data: bytes, image_shape: tuple) -> Di
         
     except Exception as e:
         logger.error(f"Font analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise ForensicsAnalysisError(f"Font analysis error: {str(e)}")
+
+
+def _perform_error_level_analysis_worker(image_data: bytes, image_shape: tuple) -> Dict[str, Any]:
+    """
+    Detect compression artifacts using Error Level Analysis.
+    ELA reveals areas of different compression levels indicating potential tampering.
+    
+    Args:
+        image_data: Image data as bytes for process communication
+        image_shape: Shape tuple (height, width, channels) to reconstruct image
+        
+    Returns:
+        Dictionary with ELA analysis results
+        
+    Raises:
+        CompressionAnalysisError: If ELA analysis fails
+    """
+    try:
+        import cv2
+        import numpy as np
+        
+        # Reconstruct image from bytes
+        image = np.frombuffer(image_data, dtype=np.uint8).reshape(image_shape)
+        
+        # Ensure image is in BGR format for OpenCV
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            # Convert RGB to BGR if needed (OpenCV uses BGR)
+            image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) if image_shape[2] == 3 else image
+        else:
+            raise ImageProcessingError("Image must be 3-channel RGB/BGR format for ELA analysis")
+        
+        # Convert to JPEG bytes for recompression at 85% quality
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
+        success, buffer = cv2.imencode('.jpg', image_bgr, encode_param)
+        
+        if not success:
+            raise CompressionAnalysisError("Failed to encode image for JPEG recompression")
+        
+        # Decode the recompressed image
+        recompressed = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+        
+        if recompressed is None:
+            raise CompressionAnalysisError("Failed to decode recompressed image")
+        
+        # Calculate difference (Error Level)
+        if image_bgr.shape == recompressed.shape:
+            difference = cv2.absdiff(image_bgr, recompressed)
+            gray_diff = cv2.cvtColor(difference, cv2.COLOR_BGR2GRAY)
+            
+            # Enhance differences for analysis
+            enhanced = cv2.equalizeHist(gray_diff)
+            
+            # Statistical analysis of error levels
+            mean_error = float(np.mean(enhanced))
+            std_error = float(np.std(enhanced))
+            max_error = float(np.max(enhanced))
+            
+            # Identify suspicious regions with high error levels
+            suspicious_regions = _identify_suspicious_regions_worker(enhanced)
+            
+            # Calculate ELA score based on error variance and intensity
+            # High variance indicates inconsistent compression (potential tampering)
+            ela_score = min(1.0, (std_error / 50.0) + (max_error / 255.0))
+            
+            return {
+                'score': float(ela_score),
+                'mean_error_level': mean_error,
+                'error_variance': std_error,
+                'max_error_level': max_error,
+                'suspicious_regions': suspicious_regions,
+                'analysis_method': 'Error Level Analysis (ELA)',
+                'recompression_quality': 85
+            }
+        else:
+            raise CompressionAnalysisError(
+                f"Image recompression failed - dimension mismatch: "
+                f"original {image_bgr.shape} vs recompressed {recompressed.shape}"
+            )
+            
+    except (ImageProcessingError, CompressionAnalysisError):
+        raise
+    except Exception as e:
+        logger.error(f"ELA analysis failed: {str(e)}")
+        raise CompressionAnalysisError(f"ELA analysis error: {str(e)}")
+
+
+def _identify_suspicious_regions_worker(enhanced_diff) -> List[Dict[str, Any]]:
+    """
+    Identify regions with suspicious compression inconsistencies.
+    
+    Args:
+        enhanced_diff: Enhanced difference image from ELA
+        
+    Returns:
+        List of suspicious regions with their characteristics
+    """
+    try:
+        import cv2
+        import numpy as np
+        
+        # Threshold to find high-error regions
+        threshold_value = np.percentile(enhanced_diff, 90)  # Top 10% of error levels
+        _, thresh = cv2.threshold(enhanced_diff, threshold_value, 255, cv2.THRESH_BINARY)
+        
+        # Find contours of suspicious regions
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        suspicious_regions = []
+        for i, contour in enumerate(contours):
+            area = cv2.contourArea(contour)
+            if area > 100:  # Filter out noise
+                x, y, w, h = cv2.boundingRect(contour)
+                
+                # Calculate region error statistics
+                region_diff = enhanced_diff[y:y+h, x:x+w]
+                region_mean = float(np.mean(region_diff))
+                region_max = float(np.max(region_diff))
+                
+                suspicious_regions.append({
+                    'region_id': i,
+                    'bbox': [int(x), int(y), int(w), int(h)],
+                    'area': float(area),
+                    'mean_error': region_mean,
+                    'max_error': region_max,
+                    'suspicion_score': min(1.0, region_max / 255.0)
+                })
+        
+        return suspicious_regions
+        
+    except Exception as e:
+        logger.warning(f"Failed to identify suspicious regions: {str(e)}")
+        return []
 
 
 def _analyze_edge_continuity_worker(edges) -> Dict[str, Any]:
@@ -202,7 +346,7 @@ def _analyze_edge_continuity_worker(edges) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Edge continuity analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise ImageProcessingError(f"Edge continuity analysis error: {str(e)}")
 
 
 def _analyze_edge_sharpness_worker(gray) -> Dict[str, Any]:
@@ -226,68 +370,539 @@ def _analyze_edge_sharpness_worker(gray) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Edge sharpness analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise ImageProcessingError(f"Edge sharpness analysis error: {str(e)}")
 
 
 def _detect_cloned_regions_worker(gray) -> Dict[str, Any]:
-    """Detect potentially cloned or duplicated regions."""
+    """
+    Detect copy-move forgery using AKAZE features and RANSAC.
+    No size limits - uses tiling for large images.
+    
+    Args:
+        gray: Grayscale image array
+        
+    Returns:
+        Dictionary with copy-move detection results
+        
+    Raises:
+        FeatureDetectionError: If feature detection fails
+    """
+    try:
+        import cv2
+        import numpy as np
+        from .forensics_exceptions import FeatureDetectionError
+        
+        h, w = gray.shape
+        
+        # Use tiling for large images instead of skipping analysis
+        if h * w > 2000000:  # 2MP threshold for tiling
+            return _tile_based_copy_move_detection_worker(gray)
+        
+        # Convert to uint8 if needed
+        if gray.dtype != np.uint8:
+            gray = (gray * 255).astype(np.uint8)
+            
+        # AKAZE feature detection (more robust than SIFT/SURF)
+        detector = cv2.AKAZE_create()
+        keypoints, descriptors = detector.detectAndCompute(gray, None)
+        
+        if descriptors is None or len(descriptors) < 10:
+            return {
+                'score': 0.0, 
+                'regions': [], 
+                'keypoints_found': 0,
+                'analysis_method': 'AKAZE feature detection'
+            }
+        
+        # Match features to themselves to find duplicates
+        matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        matches = matcher.knnMatch(descriptors, descriptors, k=3)
+        
+        # Filter self-matches and find suspicious clusters
+        suspicious_matches = []
+        for m in matches:
+            if len(m) >= 2:
+                # Skip self-match (distance 0)
+                if m[0].distance == 0 and len(m) > 1:
+                    if m[1].distance < 50:  # Threshold for similar features
+                        suspicious_matches.append(m[1])
+        
+        # Use RANSAC to find geometric consistency
+        if len(suspicious_matches) > 4:
+            src_pts = np.float32([keypoints[m.queryIdx].pt for m in suspicious_matches])
+            dst_pts = np.float32([keypoints[m.trainIdx].pt for m in suspicious_matches])
+            
+            # Find homography (geometric transformation)
+            homography, mask = cv2.findHomography(
+                src_pts, dst_pts, cv2.RANSAC, 5.0
+            )
+            
+            if mask is not None:
+                inliers = np.sum(mask)
+                cloning_score = min(1.0, inliers / 20.0)  # Normalize to 0-1
+                
+                # Extract copy-move regions from inlier matches
+                copy_move_regions = _extract_copy_move_regions_worker(
+                    src_pts[mask.ravel() == 1], 
+                    dst_pts[mask.ravel() == 1]
+                )
+                
+                return {
+                    'score': float(cloning_score),
+                    'suspicious_matches': int(len(suspicious_matches)),
+                    'geometric_inliers': int(inliers),
+                    'total_keypoints': int(len(keypoints)),
+                    'copy_move_regions': copy_move_regions,
+                    'analysis_method': 'AKAZE + RANSAC'
+                }
+            else:
+                return {
+                    'score': 0.0,
+                    'regions': [],
+                    'keypoints_found': len(keypoints),
+                    'analysis_method': 'AKAZE feature detection'
+                }
+        else:
+            return {
+                'score': 0.0, 
+                'regions': [], 
+                'keypoints_found': len(keypoints),
+                'analysis_method': 'AKAZE feature detection'
+            }
+            
+    except Exception as e:
+        logger.error(f"Copy-move detection failed: {str(e)}")
+        raise FeatureDetectionError(f"Copy-move detection error: {str(e)}")
+
+
+def _tile_based_copy_move_detection_worker(gray) -> Dict[str, Any]:
+    """
+    Perform copy-move detection on large images using tiling strategy.
+    
+    Args:
+        gray: Large grayscale image array
+        
+    Returns:
+        Dictionary with aggregated copy-move detection results
+    """
     try:
         import numpy as np
         
-        # Simple correlation-based cloning detection
         h, w = gray.shape
+        tile_size = 1024  # Process in 1024x1024 tiles
+        overlap = 128     # Overlap to avoid missing features at boundaries
         
-        # PRESERVE: Skip expensive cloning detection for large images to prevent hanging
-        if h * w > 1000000:  # More than 1MP
-            logger.info("Skipping cloning detection for large image to prevent timeout")
-            return {
-                'score': 0.0,
-                'high_correlations': 0,
-                'total_comparisons': 0,
-                'max_correlation': 0.0,
-                'regions': [],
-                'skipped': True
-            }
+        all_scores = []
+        all_regions = []
+        total_keypoints = 0
         
-        block_size = 32
-        correlations = []
+        logger.info(f"Processing large image ({w}x{h}) using tiling strategy")
         
-        # PRESERVE: Sample blocks and compare (limited for performance)
-        step_size = max(block_size, min(64, block_size * 2))  # Larger steps for performance
-        for i in range(0, h - block_size, step_size):
-            for j in range(0, w - block_size, step_size):
-                block = gray[i:i+block_size, j:j+block_size]
+        # Process overlapping tiles
+        for y in range(0, h - tile_size + 1, tile_size - overlap):
+            for x in range(0, w - tile_size + 1, tile_size - overlap):
+                # Extract tile with bounds checking
+                y_end = min(y + tile_size, h)
+                x_end = min(x + tile_size, w)
+                tile = gray[y:y_end, x:x_end]
                 
-                # Compare with other blocks (limited for performance)
-                comparison_count = 0
-                max_comparisons_per_block = 10  # Limit comparisons per block
-                
-                for ii in range(i + block_size, h - block_size, step_size):
-                    for jj in range(0, w - block_size, step_size):
-                        if comparison_count >= max_comparisons_per_block:
-                            break
-                        other_block = gray[ii:ii+block_size, jj:jj+block_size]
-                        correlation = float(np.corrcoef(block.flat, other_block.flat)[0, 1])
-                        if not np.isnan(correlation):
-                            correlations.append(correlation)
-                        comparison_count += 1
-                    if comparison_count >= max_comparisons_per_block:
-                        break
+                # Process tile if it's large enough
+                if tile.shape[0] > 200 and tile.shape[1] > 200:
+                    tile_result = _detect_cloned_regions_worker(tile)
+                    
+                    tile_score = tile_result.get('score', 0.0)
+                    all_scores.append(tile_score)
+                    total_keypoints += tile_result.get('total_keypoints', 0)
+                    
+                    # Adjust region coordinates to global image coordinates
+                    tile_regions = tile_result.get('copy_move_regions', [])
+                    for region in tile_regions:
+                        region['global_bbox'] = [
+                            region['bbox'][0] + x,
+                            region['bbox'][1] + y,
+                            region['bbox'][2],
+                            region['bbox'][3]
+                        ]
+                        all_regions.append(region)
         
-        # High correlation might indicate cloning
-        high_correlations = [c for c in correlations if c > 0.95]
-        cloning_score = len(high_correlations) / max(len(correlations), 1)
+        # Aggregate results
+        if all_scores:
+            max_score = max(all_scores)
+            avg_score = np.mean(all_scores)
+            final_score = (max_score + avg_score) / 2.0  # Balance max and average
+        else:
+            final_score = 0.0
         
         return {
-            'score': float(cloning_score),
-            'high_correlations': int(len(high_correlations)),
-            'total_comparisons': int(len(correlations)),
-            'max_correlation': float(max(correlations)) if correlations else 0.0
+            'score': float(final_score),
+            'tiles_processed': len(all_scores),
+            'copy_move_regions': all_regions,
+            'total_keypoints': total_keypoints,
+            'analysis_method': 'Tiled AKAZE + RANSAC',
+            'tile_size': tile_size,
+            'max_tile_score': float(max(all_scores)) if all_scores else 0.0
         }
         
     except Exception as e:
-        logger.error(f"Cloning detection worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        logger.error(f"Tiled copy-move detection failed: {str(e)}")
+        raise FeatureDetectionError(f"Tiled copy-move detection error: {str(e)}")
+
+
+def _extract_copy_move_regions_worker(src_pts, dst_pts) -> List[Dict[str, Any]]:
+    """
+    Extract copy-move regions from matched keypoints.
+    
+    Args:
+        src_pts: Source keypoints from inlier matches
+        dst_pts: Destination keypoints from inlier matches
+        
+    Returns:
+        List of copy-move region descriptions
+    """
+    try:
+        import numpy as np
+        import cv2
+        
+        if len(src_pts) < 4:
+            return []
+        
+        regions = []
+        
+        # Group nearby points into regions
+        for i, (src_pt, dst_pt) in enumerate(zip(src_pts, dst_pts)):
+            # Calculate displacement vector
+            displacement = dst_pt - src_pt
+            displacement_magnitude = np.linalg.norm(displacement)
+            
+            # Only consider significant displacements (avoid noise)
+            if displacement_magnitude > 10:
+                # Create bounding box around the point cluster
+                nearby_src = []
+                nearby_dst = []
+                
+                for j, (other_src, other_dst) in enumerate(zip(src_pts, dst_pts)):
+                    if np.linalg.norm(src_pt - other_src) < 50:  # Nearby threshold
+                        nearby_src.append(other_src)
+                        nearby_dst.append(other_dst)
+                
+                if len(nearby_src) >= 3:  # Minimum points for a region
+                    # Calculate bounding boxes
+                    src_bbox = cv2.boundingRect(np.array(nearby_src, dtype=np.float32))
+                    dst_bbox = cv2.boundingRect(np.array(nearby_dst, dtype=np.float32))
+                    
+                    regions.append({
+                        'region_id': len(regions),
+                        'src_bbox': [int(src_bbox[0]), int(src_bbox[1]), int(src_bbox[2]), int(src_bbox[3])],
+                        'dst_bbox': [int(dst_bbox[0]), int(dst_bbox[1]), int(dst_bbox[2]), int(dst_bbox[3])],
+                        'displacement': [float(displacement[0]), float(displacement[1])],
+                        'displacement_magnitude': float(displacement_magnitude),
+                        'point_count': len(nearby_src),
+                        'confidence': min(1.0, len(nearby_src) / 10.0)
+                    })
+        
+        return regions
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract copy-move regions: {str(e)}")
+        return []
+
+
+def _analyze_noise_patterns_worker(image_data: bytes, image_shape: tuple) -> Dict[str, Any]:
+    """
+    Analyze noise patterns for inconsistencies that might indicate tampering.
+    
+    Detects inconsistent noise characteristics across different regions of the image,
+    which can indicate splicing, copy-move operations, or other manipulations.
+    
+    Args:
+        image_data: Image data as bytes for process communication
+        image_shape: Shape tuple (height, width, channels) to reconstruct image
+        
+    Returns:
+        Dictionary with noise analysis results
+        
+    Raises:
+        ImageProcessingError: If noise analysis fails
+    """
+    try:
+        import cv2
+        import numpy as np
+        from .forensics_exceptions import ImageProcessingError
+        
+        # Reconstruct image from bytes
+        image = np.frombuffer(image_data, dtype=np.uint8).reshape(image_shape)
+        
+        # Convert to grayscale for noise analysis
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image
+        
+        # Ensure float type for accurate calculations
+        gray = gray.astype(np.float64)
+        
+        # Apply high-pass filter to isolate noise
+        noise_image = _extract_noise_component_worker(gray)
+        
+        # Analyze noise characteristics in different regions
+        noise_statistics = _analyze_regional_noise_worker(noise_image)
+        
+        # Detect noise inconsistencies
+        inconsistency_score = _detect_noise_inconsistencies_worker(noise_statistics)
+        
+        # Model noise distribution
+        noise_model = _model_noise_distribution_worker(noise_image)
+        
+        # Calculate overall noise analysis score
+        noise_score = min(1.0, inconsistency_score + noise_model.get('anomaly_score', 0.0))
+        
+        return {
+            'score': float(noise_score),
+            'regional_statistics': noise_statistics,
+            'noise_model': noise_model,
+            'inconsistency_score': float(inconsistency_score),
+            'analysis_method': 'Gaussian noise modeling with regional analysis',
+            'regions_analyzed': len(noise_statistics)
+        }
+        
+    except Exception as e:
+        logger.error(f"Noise analysis failed: {str(e)}")
+        raise ImageProcessingError(f"Noise analysis error: {str(e)}")
+
+
+def _extract_noise_component_worker(gray):
+    """
+    Extract noise component from image using high-pass filtering.
+    
+    Args:
+        gray: Grayscale image as float64 array
+        
+    Returns:
+        Noise component of the image
+    """
+    try:
+        import cv2
+        from skimage import filters
+        
+        # Apply Gaussian blur to get low-frequency component
+        blurred = filters.gaussian(gray, sigma=1.0)
+        
+        # Subtract blurred from original to get high-frequency (noise) component
+        noise = gray - blurred
+        
+        # Alternative method: use Laplacian for edge-preserving noise extraction
+        laplacian = cv2.Laplacian(gray, cv2.CV_64F, ksize=3)
+        
+        # Combine both methods for robust noise estimation
+        combined_noise = 0.7 * noise + 0.3 * laplacian
+        
+        return combined_noise
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract noise component: {str(e)}")
+        return gray - filters.gaussian(gray, sigma=1.0)  # Fallback method
+
+
+def _analyze_regional_noise_worker(noise_image) -> List[Dict[str, Any]]:
+    """
+    Analyze noise characteristics in different regions of the image.
+    
+    Args:
+        noise_image: High-frequency noise component of the image
+        
+    Returns:
+        List of regional noise statistics
+    """
+    try:
+        import numpy as np
+        
+        h, w = noise_image.shape
+        region_size = 64  # 64x64 pixel regions
+        noise_stats = []
+        
+        # Analyze noise in overlapping regions
+        step_size = region_size // 2  # 50% overlap
+        
+        for y in range(0, h - region_size + 1, step_size):
+            for x in range(0, w - region_size + 1, step_size):
+                region = noise_image[y:y+region_size, x:x+region_size]
+                
+                # Calculate noise statistics for this region
+                noise_variance = float(np.var(region))
+                noise_mean = float(np.mean(region))
+                noise_std = float(np.std(region))
+                noise_skewness = float(_calculate_skewness_worker(region))
+                noise_kurtosis = float(_calculate_kurtosis_worker(region))
+                
+                # Estimate local signal-to-noise ratio
+                signal_power = float(np.var(region + np.mean(region)))
+                snr = signal_power / max(noise_variance, 1e-10)
+                
+                noise_stats.append({
+                    'region_id': len(noise_stats),
+                    'bbox': [x, y, region_size, region_size],
+                    'variance': noise_variance,
+                    'mean': noise_mean,
+                    'std': noise_std,
+                    'skewness': noise_skewness,
+                    'kurtosis': noise_kurtosis,
+                    'snr': float(snr)
+                })
+        
+        return noise_stats
+        
+    except Exception as e:
+        logger.warning(f"Failed to analyze regional noise: {str(e)}")
+        return []
+
+
+def _detect_noise_inconsistencies_worker(noise_statistics: List[Dict[str, Any]]) -> float:
+    """
+    Detect inconsistencies in noise characteristics across regions.
+    
+    Args:
+        noise_statistics: List of regional noise statistics
+        
+    Returns:
+        Inconsistency score (0.0 to 1.0)
+    """
+    try:
+        import numpy as np
+        
+        if len(noise_statistics) < 4:
+            return 0.0
+        
+        # Extract statistical measures
+        variances = [stat['variance'] for stat in noise_statistics]
+        skewnesses = [stat['skewness'] for stat in noise_statistics]
+        kurtoses = [stat['kurtosis'] for stat in noise_statistics]
+        snrs = [stat['snr'] for stat in noise_statistics]
+        
+        # Calculate coefficient of variation for each measure
+        variance_cv = np.std(variances) / max(np.mean(variances), 1e-10)
+        skewness_cv = np.std(skewnesses) / max(abs(np.mean(skewnesses)), 1e-10)
+        kurtosis_cv = np.std(kurtoses) / max(abs(np.mean(kurtoses)), 1e-10)
+        snr_cv = np.std(snrs) / max(np.mean(snrs), 1e-10)
+        
+        # High coefficient of variation indicates inconsistent noise
+        # Combine different measures with weights
+        inconsistency_score = (
+            0.4 * min(1.0, variance_cv / 0.5) +    # Variance inconsistency
+            0.3 * min(1.0, skewness_cv / 1.0) +    # Distribution shape inconsistency
+            0.2 * min(1.0, kurtosis_cv / 1.0) +    # Tail behavior inconsistency
+            0.1 * min(1.0, snr_cv / 0.3)           # SNR inconsistency
+        )
+        
+        return float(inconsistency_score)
+        
+    except Exception as e:
+        logger.warning(f"Failed to detect noise inconsistencies: {str(e)}")
+        return 0.0
+
+
+def _model_noise_distribution_worker(noise_image) -> Dict[str, Any]:
+    """
+    Model the noise distribution and detect anomalies.
+    
+    Args:
+        noise_image: High-frequency noise component
+        
+    Returns:
+        Dictionary with noise model results
+    """
+    try:
+        import numpy as np
+        from scipy import stats
+        
+        # Flatten noise image for distribution analysis
+        noise_flat = noise_image.flatten()
+        
+        # Remove extreme outliers for robust fitting
+        percentile_1 = np.percentile(noise_flat, 1)
+        percentile_99 = np.percentile(noise_flat, 99)
+        noise_filtered = noise_flat[(noise_flat >= percentile_1) & (noise_flat <= percentile_99)]
+        
+        # Fit Gaussian distribution
+        gaussian_params = stats.norm.fit(noise_filtered)
+        gaussian_mean = float(gaussian_params[0])
+        gaussian_std = float(gaussian_params[1])
+        
+        # Test goodness of fit using Kolmogorov-Smirnov test
+        ks_statistic, ks_p_value = stats.kstest(
+            noise_filtered, 
+            lambda x: stats.norm.cdf(x, gaussian_mean, gaussian_std)
+        )
+        
+        # Calculate anomaly score based on deviation from Gaussian
+        # High KS statistic indicates non-Gaussian noise (potential manipulation)
+        anomaly_score = min(1.0, ks_statistic / 0.1)
+        
+        # Additional check: analyze noise histogram
+        hist, bin_edges = np.histogram(noise_filtered, bins=50, density=True)
+        
+        # Expected Gaussian values at bin centers
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        expected_gaussian = stats.norm.pdf(bin_centers, gaussian_mean, gaussian_std)
+        
+        # Calculate chi-squared statistic for histogram comparison
+        chi_squared = np.sum((hist - expected_gaussian) ** 2 / (expected_gaussian + 1e-10))
+        
+        return {
+            'gaussian_mean': gaussian_mean,
+            'gaussian_std': gaussian_std,
+            'ks_statistic': float(ks_statistic),
+            'ks_p_value': float(ks_p_value),
+            'anomaly_score': float(anomaly_score),
+            'chi_squared': float(chi_squared),
+            'distribution_type': 'Gaussian' if ks_p_value > 0.05 else 'Non-Gaussian'
+        }
+        
+    except Exception as e:
+        logger.warning(f"Failed to model noise distribution: {str(e)}")
+        return {
+            'gaussian_mean': 0.0,
+            'gaussian_std': 1.0,
+            'anomaly_score': 0.0,
+            'distribution_type': 'Unknown'
+        }
+
+
+def _calculate_skewness_worker(data) -> float:
+    """Calculate skewness of data distribution."""
+    try:
+        import numpy as np
+        
+        data_flat = data.flatten()
+        mean = np.mean(data_flat)
+        std = np.std(data_flat)
+        
+        if std == 0:
+            return 0.0
+        
+        skewness = np.mean(((data_flat - mean) / std) ** 3)
+        return float(skewness)
+        
+    except Exception:
+        return 0.0
+
+
+def _calculate_kurtosis_worker(data) -> float:
+    """Calculate kurtosis of data distribution."""
+    try:
+        import numpy as np
+        
+        data_flat = data.flatten()
+        mean = np.mean(data_flat)
+        std = np.std(data_flat)
+        
+        if std == 0:
+            return 0.0
+        
+        kurtosis = np.mean(((data_flat - mean) / std) ** 4) - 3  # Excess kurtosis
+        return float(kurtosis)
+        
+    except Exception:
+        return 0.0
 
 
 def _detect_jpeg_artifacts_worker(gray) -> Dict[str, Any]:
@@ -326,7 +941,7 @@ def _detect_jpeg_artifacts_worker(gray) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"JPEG artifact detection worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise CompressionAnalysisError(f"JPEG artifact detection error: {str(e)}")
 
 
 def _detect_compression_inconsistencies_worker(image) -> Dict[str, Any]:
@@ -362,7 +977,7 @@ def _detect_compression_inconsistencies_worker(image) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Compression inconsistency detection worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise CompressionAnalysisError(f"Compression inconsistency detection error: {str(e)}")
 
 
 def _detect_recompression_patterns_worker(gray) -> Dict[str, Any]:
@@ -392,7 +1007,7 @@ def _detect_recompression_patterns_worker(gray) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Recompression pattern detection worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise CompressionAnalysisError(f"Recompression pattern detection error: {str(e)}")
 
 
 def _analyze_block_artifacts_worker(gray) -> Dict[str, Any]:
@@ -432,7 +1047,7 @@ def _analyze_block_artifacts_worker(gray) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Block artifact analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise CompressionAnalysisError(f"Block artifact analysis error: {str(e)}")
 
 
 def _detect_text_regions_worker(gray) -> List[Dict[str, Any]]:
@@ -522,7 +1137,7 @@ def _analyze_font_characteristics_worker(gray, text_regions: List[Dict[str, Any]
         
     except Exception as e:
         logger.error(f"Font characteristics analysis worker failed: {str(e)}")
-        return {'consistency_score': 0.0, 'error': str(e)}
+        raise ForensicsAnalysisError(f"Font characteristics analysis error: {str(e)}")
 
 
 def _estimate_stroke_width_worker(text_roi) -> float:
@@ -581,7 +1196,7 @@ def _detect_font_inconsistencies_worker(font_characteristics: Dict[str, Any]) ->
         
     except Exception as e:
         logger.error(f"Font inconsistency detection worker failed: {str(e)}")
-        return {'penalty': 0.0, 'error': str(e)}
+        raise ForensicsAnalysisError(f"Font inconsistency detection error: {str(e)}")
 
 
 def _analyze_text_alignment_worker(gray, text_regions: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -627,4 +1242,4 @@ def _analyze_text_alignment_worker(gray, text_regions: List[Dict[str, Any]]) -> 
         
     except Exception as e:
         logger.error(f"Text alignment analysis worker failed: {str(e)}")
-        return {'score': 0.0, 'error': str(e)}
+        raise ForensicsAnalysisError(f"Text alignment analysis error: {str(e)}")
