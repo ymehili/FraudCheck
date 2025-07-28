@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     project_name: str = "CheckGuard AI"
     debug: bool = False
     
-    model_config = ConfigDict(env_file=".env")
+    model_config = ConfigDict(env_file=".env", extra="ignore")
     
     @property
     def celery_broker_url(self) -> str:
