@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import uuid
+import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Any
+from dataclasses import dataclass
 import numpy as np
 
 from ...database import get_db
@@ -14,13 +18,16 @@ from ...schemas.analysis import (
     AnalysisResponse, 
     AnalysisResultResponse,
     AnalysisListResponse,
+    ForensicsResult,
+    OCRResult,
+    RuleEngineResult,
     AsyncAnalysisRequest,
     AsyncAnalysisResponse
 )
 from ...core.forensics import ForensicsEngine
 from ...core.ocr import OCREngine, create_ocr_engine
 from ...core.rule_engine import load_rule_engine
-from ...core.scoring import RiskScoreCalculator
+from ...core.scoring import RiskScoreCalculator, RiskScoreData
 # Removed unused imports - functions only used by deprecated sync endpoint
 from ..deps import get_current_user
 
@@ -28,7 +35,16 @@ router = APIRouter(tags=["analysis"])
 logger = logging.getLogger(__name__)
 
 
-# Initialize engines for async analysis
+@dataclass
+class ComprehensiveAnalysisResult:
+    """Data class for comprehensive analysis results."""
+    forensics_result: Optional[ForensicsResult] = None
+    ocr_result: Optional[OCRResult] = None
+    rule_result: Optional[RuleEngineResult] = None
+    risk_score_data: Optional[RiskScoreData] = None
+
+
+# Initialize engines
 forensics_engine = ForensicsEngine()
 rule_engine = load_rule_engine()
 risk_calculator = RiskScoreCalculator()
@@ -407,7 +423,143 @@ async def _get_existing_analysis(file_id: str, db: AsyncSession) -> Optional[Ana
 # Removed helper functions - only used by deprecated sync endpoint
 # These functions have been replaced by streaming equivalents
 
+async def _run_comprehensive_analysis(file_path: str, analysis_types: list) -> ComprehensiveAnalysisResult:
+    """Run comprehensive analysis on the image."""
+    try:
+        forensics_result = None
+        ocr_result = None
+        rule_result = None
+        
+        # Run analysis components in parallel
+        tasks = []
+        
+        if "forensics" in analysis_types:
+            tasks.append(("forensics", forensics_engine.analyze_image(file_path)))
+        
+        if "ocr" in analysis_types:
+            ocr_engine = await get_ocr_engine()
+            tasks.append(("ocr", ocr_engine.extract_fields(file_path)))
+        
+        # Execute tasks
+        if tasks:
+            task_results = await asyncio.gather(*[task[1] for task in tasks])
+            
+            for i, (task_name, _) in enumerate(tasks):
+                if task_name == "forensics":
+                    forensics_result = task_results[i]  # type: ignore
+                elif task_name == "ocr":
+                    ocr_result = task_results[i]  # type: ignore
+        
+        # Run rule engine if we have results
+        if "rules" in analysis_types and forensics_result and ocr_result:
+            rule_result = await rule_engine.process_results(
+                forensics_result,
+                ocr_result
+            )
+        
+        # Calculate enhanced risk score if we have all components
+        risk_score_data = None
+        if forensics_result and ocr_result and rule_result:
+            try:
+                risk_score_data = risk_calculator.calculate_risk_score(
+                    forensics_result,
+                    ocr_result,
+                    rule_result
+                )
+                logger.info(f"Risk score calculated: {risk_score_data.overall_score} ({risk_score_data.risk_level.value})")
+            except Exception as e:
+                logger.error(f"Risk score calculation failed: {str(e)}")
+                # Continue without enhanced scoring if it fails
+        
+        return ComprehensiveAnalysisResult(
+            forensics_result=forensics_result,
+            ocr_result=ocr_result,
+            rule_result=rule_result,
+            risk_score_data=risk_score_data
+        )
+        
+    except Exception as e:
+        logger.error(f"Comprehensive analysis failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed: {str(e)}"
+        )
 
+
+async def _store_analysis_results(file_id: str, analysis_result: ComprehensiveAnalysisResult, 
+                                 db: AsyncSession) -> AnalysisResult:
+    """Store analysis results in database."""
+    try:
+        # Extract results
+        forensics_result = analysis_result.forensics_result
+        ocr_result = analysis_result.ocr_result
+        rule_result = analysis_result.rule_result
+        risk_score_data = analysis_result.risk_score_data
+        
+        # Create analysis record with numpy type conversion
+        analysis_record = AnalysisResult(
+            id=str(uuid.uuid4()),
+            file_id=file_id,
+            analysis_timestamp=datetime.now(timezone.utc),
+            
+            # Forensics results (convert numpy types)
+            forensics_score=_convert_numpy_types(forensics_result.overall_score if forensics_result else 0.0),
+            edge_inconsistencies=_convert_numpy_types(forensics_result.edge_inconsistencies if forensics_result else {}),
+            compression_artifacts=_convert_numpy_types(forensics_result.compression_artifacts if forensics_result else {}),
+            font_analysis=_convert_numpy_types(forensics_result.font_analysis if forensics_result else {}),
+            
+            # OCR results (convert numpy types)
+            ocr_confidence=_convert_numpy_types(ocr_result.extraction_confidence if ocr_result else 0.0),
+            extracted_fields=_convert_numpy_types({
+                "payee": ocr_result.payee if ocr_result else None,
+                "amount": ocr_result.amount if ocr_result else None,
+                "date": ocr_result.date if ocr_result else None,
+                "account_number": ocr_result.account_number if ocr_result else None,
+                "routing_number": ocr_result.routing_number if ocr_result else None,
+                "check_number": ocr_result.check_number if ocr_result else None,
+                "memo": ocr_result.memo if ocr_result else None,
+                "signature_detected": ocr_result.signature_detected if ocr_result else False,
+                "field_confidences": ocr_result.field_confidences if ocr_result else {}
+            }),
+            
+            # Rule engine results (convert numpy types) - use enhanced risk score if available
+            overall_risk_score=_convert_numpy_types(
+                float(risk_score_data.overall_score) if risk_score_data else 
+                (rule_result.risk_score if rule_result else 0.0)
+            ),
+            rule_violations=_convert_numpy_types({
+                "violations": rule_result.violations if rule_result else [],
+                "passed_rules": rule_result.passed_rules if rule_result else [],
+                "rule_scores": rule_result.rule_scores if rule_result else {},
+                # Add enhanced scoring data if available
+                "enhanced_scoring": {
+                    "category_scores": risk_score_data.category_scores,
+                    "risk_factors": risk_score_data.risk_factors,
+                    "risk_level": risk_score_data.risk_level.value,
+                    "detailed_breakdown": risk_score_data.detailed_breakdown,
+                    "recommendations": risk_score_data.recommendations,
+                    "timestamp": risk_score_data.timestamp.isoformat()
+                } if risk_score_data else None
+            }),
+            confidence_factors=_convert_numpy_types(
+                {"overall": risk_score_data.confidence_level} if risk_score_data else 
+                (rule_result.confidence_factors if rule_result else {})
+            )
+        )
+        
+        db.add(analysis_record)
+        await db.commit()
+        await db.refresh(analysis_record)
+        
+        return analysis_record
+        
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to store analysis results: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to store analysis results: {str(e)}"
+        )
 
 
 async def _format_analysis_response(analysis_record: AnalysisResult) -> AnalysisResponse:
