@@ -163,9 +163,9 @@ typings/
 .nuxt
 # dist - commented out to avoid excluding frontend src in build context
 
-# Gatsby files
+# Gatsby files (exclude Next.js frontend public)
 .cache/
-public
+# public - commented out to allow Next.js frontend/public directory
 
 # Storybook build outputs
 .out
