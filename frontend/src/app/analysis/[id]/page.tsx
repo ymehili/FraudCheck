@@ -28,8 +28,8 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AnalysisResponse } from '@/types/api';
-import { formatDate, getRiskLevel, formatCurrency, cn, formatRiskScore, formatConfidence, formatScore } from '@/lib/utils';
-import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
+import { formatDate, getRiskLevel, getRiskColor, cn, formatRiskScore, formatConfidence, formatScore } from '@/lib/utils';
+import { ROUTES } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function AnalysisResultPage() {
@@ -71,18 +71,6 @@ export default function AnalysisResultPage() {
   const handleDownloadReport = async () => {
     // PDF generation is now handled by the PDFGenerator component
     console.log('Download report for analysis:', analysisId);
-  };
-
-  const getRiskColor = (score: number) => {
-    if (score >= RISK_THRESHOLDS.HIGH) return 'text-red-600';
-    if (score >= RISK_THRESHOLDS.MEDIUM) return 'text-yellow-600';
-    return 'text-green-600';
-  };
-
-  const getRiskBgColor = (score: number) => {
-    if (score >= RISK_THRESHOLDS.HIGH) return 'bg-red-50';
-    if (score >= RISK_THRESHOLDS.MEDIUM) return 'bg-yellow-50';
-    return 'bg-green-50';
   };
 
   if (error) {
@@ -210,25 +198,26 @@ export default function AnalysisResultPage() {
                 <CardContent>
                   <div className={cn(
                     "rounded-lg p-6 border-2",
-                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "border-red-200 bg-red-50" :
-                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-200 bg-yellow-50" :
+                    getRiskLevel(analysis.overall_risk_score) === 'critical' ? "border-red-200 bg-red-50" :
+                    getRiskLevel(analysis.overall_risk_score) === 'high' ? "border-orange-200 bg-orange-50" :
+                    getRiskLevel(analysis.overall_risk_score) === 'medium' ? "border-yellow-200 bg-yellow-50" :
                     "border-green-200 bg-green-50"
                   )}>
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">
-                          Risk Level: {getRiskLevel(analysis.overall_risk_score * 100)}
+                          Risk Level: {getRiskLevel(analysis.overall_risk_score)}
                         </h3>
                         <p className="text-sm text-gray-600">
                           Based on comprehensive fraud detection analysis
                         </p>
                       </div>
-                      <div className={cn("text-4xl font-bold", getRiskColor(analysis.overall_risk_score * 100))}>
+                      <div className={cn("text-4xl font-bold", getRiskColor(analysis.overall_risk_score))}>
                         {formatRiskScore(analysis.overall_risk_score)}
                       </div>
                     </div>
                     <Progress 
-                      value={analysis.overall_risk_score * 100} 
+                      value={analysis.overall_risk_score} 
                       className="h-3"
                     />
                   </div>
@@ -482,21 +471,23 @@ export default function AnalysisResultPage() {
                 <CardContent className="text-center">
                   <div className={cn(
                     "w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl font-bold border-4",
-                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "border-red-500 bg-red-50 text-red-600" :
-                    (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "border-yellow-500 bg-yellow-50 text-yellow-600" :
+                    getRiskLevel(analysis.overall_risk_score) === 'critical' ? "border-red-600 bg-red-50 text-red-600" :
+                    getRiskLevel(analysis.overall_risk_score) === 'high' ? "border-orange-500 bg-orange-50 text-orange-600" :
+                    getRiskLevel(analysis.overall_risk_score) === 'medium' ? "border-yellow-500 bg-yellow-50 text-yellow-600" :
                     "border-green-500 bg-green-50 text-green-600"
                   )}>
                     {formatRiskScore(analysis.overall_risk_score)}
                   </div>
                   <Badge 
                     variant={
-                      (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.HIGH ? "destructive" :
-                      (analysis.overall_risk_score * 100) >= RISK_THRESHOLDS.MEDIUM ? "default" :
+                      getRiskLevel(analysis.overall_risk_score) === 'critical' ? "destructive" :
+                      getRiskLevel(analysis.overall_risk_score) === 'high' ? "destructive" :
+                      getRiskLevel(analysis.overall_risk_score) === 'medium' ? "default" :
                       "secondary"
                     }
                     className="mb-2"
                   >
-                    {getRiskLevel(analysis.overall_risk_score * 100)}
+                    {getRiskLevel(analysis.overall_risk_score)}
                   </Badge>
                   <p className="text-sm text-gray-600">
                     Out of 100 possible points

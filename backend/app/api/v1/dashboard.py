@@ -16,6 +16,8 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import logging
+import json
+from pathlib import Path
 
 from ...database import get_db
 from ...models.user import User
@@ -539,7 +541,7 @@ async def get_dashboard(
 async def _get_risk_distribution(db: AsyncSession, user_id: str) -> RiskDistribution:
     """Calculate risk distribution for user's analyses using optimized single query."""
     try:
-        # Single optimized query using conditional aggregation
+        # Single optimized query using conditional aggregation with correct thresholds
         risk_query = (
             select(
                 func.count(AnalysisResult.id).label('total'),
@@ -554,12 +556,12 @@ async def _get_risk_distribution(db: AsyncSession, user_id: str) -> RiskDistribu
                 ).label('medium'),
                 func.sum(
                     case(
-                        (and_(AnalysisResult.overall_risk_score >= 60, AnalysisResult.overall_risk_score < 80), 1),
+                        (and_(AnalysisResult.overall_risk_score >= 60, AnalysisResult.overall_risk_score < 90), 1),
                         else_=0
                     )
                 ).label('high'),
                 func.sum(
-                    case((AnalysisResult.overall_risk_score >= 80, 1), else_=0)
+                    case((AnalysisResult.overall_risk_score >= 90, 1), else_=0)
                 ).label('critical')
             )
             .select_from(AnalysisResult)
@@ -820,15 +822,36 @@ async def _convert_to_enhanced_result(analysis: AnalysisResult) -> EnhancedAnaly
 
 
 def _get_risk_level_from_score(score: float) -> RiskLevel:
-    """Determine risk level from score."""
-    if score >= 80:
-        return RiskLevel.CRITICAL
-    elif score >= 60:
-        return RiskLevel.HIGH
-    elif score >= 30:
-        return RiskLevel.MEDIUM
-    else:
-        return RiskLevel.LOW
+    """Determine risk level from score using the same thresholds as scoring engine."""
+    # Load thresholds from scoring config to ensure consistency
+    config_path = Path(__file__).parent.parent.parent / "config" / "scoring_config.json"
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        thresholds = config['risk_thresholds']
+        
+        if score >= thresholds['CRITICAL']:
+            return RiskLevel.CRITICAL
+        elif score >= thresholds['HIGH']:
+            return RiskLevel.HIGH
+        elif score >= thresholds['MEDIUM']:
+            return RiskLevel.MEDIUM
+        else:
+            return RiskLevel.LOW
+            
+    except Exception as e:
+        # Fallback to hardcoded values if config can't be loaded
+        logging.warning(f"Could not load scoring config: {e}")
+        if score >= 90:
+            return RiskLevel.CRITICAL
+        elif score >= 80:
+            return RiskLevel.HIGH
+        elif score >= 60:
+            return RiskLevel.MEDIUM
+        else:
+            return RiskLevel.LOW
 
 
 async def _get_filtered_summary(db: AsyncSession, user_id: str, filters: DashboardFilter) -> Dict[str, Any]:
