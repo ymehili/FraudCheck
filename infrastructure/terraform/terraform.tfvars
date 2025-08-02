@@ -15,3 +15,7 @@ github_repository = "ymehili/CheckGuard"
 
 # Optional SSL Certificate ARN (leave empty for HTTP-only initially)
 ssl_certificate_arn = ""
+
+# Billing Protection Configuration
+daily_budget_limit = 10
+billing_alert_email = "youssefmehili@gmail.com"
