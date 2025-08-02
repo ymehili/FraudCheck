@@ -186,6 +186,75 @@ jobs:
             --query 'taskDefinition' \
             --output json)
           
+          # Debug task definition logging configuration
+          echo "Checking task definition logging configuration..."
+          LOG_CONFIG=$(echo $TASK_DEFINITION | jq '.containerDefinitions[0].logConfiguration')
+          echo "Log configuration: $LOG_CONFIG"
+          
+          # First, run a simple connectivity test
+          echo "Creating simple connectivity test task..."
+          SIMPLE_TEST_DEF=$(echo $TASK_DEFINITION | jq \
+            '.containerDefinitions[0].command = ["python", "-c", "import os; print(\"Python works!\"); print(\"DATABASE_URL:\", \"SET\" if os.environ.get(\"DATABASE_URL\") else \"NOT SET\"); import sys; sys.exit(0)"] | 
+             .containerDefinitions[0].logConfiguration = {
+               "logDriver": "awslogs",
+               "options": {
+                 "awslogs-group": "/ecs/checkguard-backend",
+                 "awslogs-region": "us-east-2",
+                 "awslogs-stream-prefix": "simple-test"
+               }
+             } |
+             del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
+             del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          # Register simple test task definition
+          SIMPLE_TEST_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$SIMPLE_TEST_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          # Get network configuration
+          PRIVATE_SUBNET=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Type,Values=private" \
+            --query 'Subnets[0].SubnetId' \
+            --output text)
+          
+          SECURITY_GROUP=$(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=checkguard-ecs-sg" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
+          
+          echo "Using subnet: $PRIVATE_SUBNET"
+          echo "Using security group: $SECURITY_GROUP"
+          
+          # Run simple test task
+          SIMPLE_TEST_TASK_ID=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $SIMPLE_TEST_TASK_ARN \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Simple test task started: $SIMPLE_TEST_TASK_ID"
+          
+          # Wait for simple test to complete
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $SIMPLE_TEST_TASK_ID
+          
+          SIMPLE_EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $SIMPLE_TEST_TASK_ID \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          echo "Simple test exit code: $SIMPLE_EXIT_CODE"
+          
+          if [ "$SIMPLE_EXIT_CODE" != "0" ]; then
+            echo "Basic connectivity test failed. There's a fundamental issue with the ECS setup."
+            exit 1
+          fi
+          
+          echo "Basic connectivity test passed. Proceeding with environment test..."
+          
           # Create a test task first to check environment
           echo "Creating environment test task..."
           TEST_TASK_DEF=$(echo $TASK_DEFINITION | jq \
@@ -194,6 +263,20 @@ jobs:
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
+          # Ensure log configuration is properly set
+          TEST_TASK_DEF=$(echo $TEST_TASK_DEF | jq '
+            .containerDefinitions[0].logConfiguration = {
+              "logDriver": "awslogs",
+              "options": {
+                "awslogs-group": "/ecs/checkguard-backend",
+                "awslogs-region": "us-east-2",
+                "awslogs-stream-prefix": "env-test"
+              }
+            }')
+          
+          echo "Test task definition logging configuration:"
+          echo $TEST_TASK_DEF | jq '.containerDefinitions[0].logConfiguration'
+          
           # Register test task definition
           TEST_TASK_ARN=$(aws ecs register-task-definition \
             --cli-input-json "$TEST_TASK_DEF" \
@@ -201,6 +284,11 @@ jobs:
             --output text)
           
           echo "Running environment test..."
+          
+          # Debug task definition logging configuration
+          echo "Checking task definition logging configuration..."
+          LOG_CONFIG=$(echo $TASK_DEFINITION | jq '.containerDefinitions[0].logConfiguration')
+          echo "Log configuration: $LOG_CONFIG"
           
           # Get network configuration
           PRIVATE_SUBNET=$(aws ec2 describe-subnets \
@@ -230,38 +318,103 @@ jobs:
           # Wait for test to complete
           aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TEST_TASK_ID
           
-          # Check test results
-          TEST_EXIT_CODE=$(aws ecs describe-tasks \
+          # Get detailed task information first
+          TEST_TASK_DETAILS=$(aws ecs describe-tasks \
             --cluster $ECS_CLUSTER \
             --tasks $TEST_TASK_ID \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
+            --query 'tasks[0]' \
+            --output json)
           
+          TEST_EXIT_CODE=$(echo "$TEST_TASK_DETAILS" | jq -r '.containers[0].exitCode // "null"')
+          TEST_STOP_REASON=$(echo "$TEST_TASK_DETAILS" | jq -r '.containers[0].reason // "Unknown"')
+          TASK_STATUS=$(echo "$TEST_TASK_DETAILS" | jq -r '.lastStatus // "Unknown"')
+          
+          echo "Environment test task status: $TASK_STATUS"
           echo "Environment test exit code: $TEST_EXIT_CODE"
+          echo "Environment test stop reason: $TEST_STOP_REASON"
           
-          if [ "$TEST_EXIT_CODE" != "0" ]; then
-            echo "Environment test failed. Checking logs..."
+          if [ "$TEST_EXIT_CODE" != "0" ] || [ "$TEST_EXIT_CODE" = "null" ]; then
+            echo "Environment test failed or didn't complete properly. Checking logs..."
             
-            # Try to get logs
+            # Extract task ID from ARN for log stream matching
+            TASK_SHORT_ID=$(echo $TEST_TASK_ID | sed 's/.*\///')
+            echo "Task short ID: $TASK_SHORT_ID"
+            
+            # Try to get logs with improved logic
             LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
-            if [ -n "$LOG_GROUP" ]; then
+            LOG_STREAM_PREFIX=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" // "ecs"')
+            
+            echo "Log group: $LOG_GROUP"
+            echo "Log stream prefix: $LOG_STREAM_PREFIX"
+            
+            if [ -n "$LOG_GROUP" ] && [ "$LOG_GROUP" != "null" ]; then
+              # Wait a bit for logs to be written
+              echo "Waiting 30 seconds for logs to be available..."
+              sleep 30
+              
+              # List available log streams for debugging
+              echo "Available log streams:"
+              aws logs describe-log-streams \
+                --log-group-name $LOG_GROUP \
+                --order-by LastEventTime \
+                --descending \
+                --limit 10 \
+                --query 'logStreams[*].logStreamName' \
+                --output text || echo "Failed to list log streams"
+              
+              # Try multiple approaches to find the right log stream
+              LOG_STREAM=""
+              
+              # Approach 1: Look for env-test prefix
               LOG_STREAM=$(aws logs describe-log-streams \
                 --log-group-name $LOG_GROUP \
                 --order-by LastEventTime \
                 --descending \
-                --limit 5 \
+                --limit 10 \
                 --query 'logStreams[?contains(logStreamName, `env-test`)].logStreamName | [0]' \
                 --output text 2>/dev/null || echo "")
               
-              if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ]; then
+              # Approach 2: Look for task ID in stream name
+              if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
+                LOG_STREAM=$(aws logs describe-log-streams \
+                  --log-group-name $LOG_GROUP \
+                  --order-by LastEventTime \
+                  --descending \
+                  --limit 10 \
+                  --query "logStreams[?contains(logStreamName, \`$TASK_SHORT_ID\`)].logStreamName | [0]" \
+                  --output text 2>/dev/null || echo "")
+              fi
+              
+              # Approach 3: Get the most recent stream
+              if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
+                LOG_STREAM=$(aws logs describe-log-streams \
+                  --log-group-name $LOG_GROUP \
+                  --order-by LastEventTime \
+                  --descending \
+                  --limit 1 \
+                  --query 'logStreams[0].logStreamName' \
+                  --output text 2>/dev/null || echo "")
+              fi
+              
+              if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "null" ]; then
+                echo "Found log stream: $LOG_STREAM"
                 echo "Environment test logs:"
                 aws logs get-log-events \
                   --log-group-name $LOG_GROUP \
                   --log-stream-name $LOG_STREAM \
+                  --start-time $(date -d '10 minutes ago' +%s)000 \
                   --query 'events[*].message' \
-                  --output text
+                  --output text 2>/dev/null || echo "Failed to get log events"
+              else
+                echo "Could not find log stream for task"
               fi
+            else
+              echo "No log group configured"
             fi
+            
+            # Show task definition details for debugging
+            echo "Task definition details:"
+            echo "$TEST_TASK_DETAILS" | jq '.containers[0] | {name, image, exitCode, reason}'
             
             echo "Environment test failed. Aborting migration."
             exit 1
@@ -275,6 +428,20 @@ jobs:
              .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "migration" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          # Ensure log configuration is properly set
+          MIGRATION_TASK_DEF=$(echo $MIGRATION_TASK_DEF | jq '
+            .containerDefinitions[0].logConfiguration = {
+              "logDriver": "awslogs",
+              "options": {
+                "awslogs-group": "/ecs/checkguard-backend",
+                "awslogs-region": "us-east-2",
+                "awslogs-stream-prefix": "migration"
+              }
+            }')
+          
+          echo "Migration task definition logging configuration:"
+          echo $MIGRATION_TASK_DEF | jq '.containerDefinitions[0].logConfiguration'
           
           # Register migration task definition
           MIGRATION_TASK_ARN=$(aws ecs register-task-definition \
@@ -331,24 +498,77 @@ jobs:
           echo "Stop reason: $STOP_REASON"
           
           # Get CloudWatch logs for debugging
-          LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
-          LOG_STREAM=$(aws logs describe-log-streams \
-            --log-group-name $LOG_GROUP \
-            --order-by LastEventTime \
-            --descending \
-            --limit 5 \
-            --query 'logStreams[?contains(logStreamName, `migration`)].logStreamName | [0]' \
-            --output text 2>/dev/null || echo "")
+          echo "Fetching migration logs..."
           
-          if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ]; then
-            echo "Fetching migration logs from CloudWatch..."
-            aws logs get-log-events \
+          # Extract task ID from ARN for log stream matching
+          MIGRATION_TASK_SHORT_ID=$(echo $TASK_ARN | sed 's/.*\///')
+          echo "Migration task short ID: $MIGRATION_TASK_SHORT_ID"
+          
+          LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
+          
+          if [ -n "$LOG_GROUP" ] && [ "$LOG_GROUP" != "null" ]; then
+            # Wait for logs to be available
+            echo "Waiting 30 seconds for logs to be written..."
+            sleep 30
+            
+            # List available log streams for debugging
+            echo "Available recent log streams:"
+            aws logs describe-log-streams \
               --log-group-name $LOG_GROUP \
-              --log-stream-name $LOG_STREAM \
-              --query 'events[*].message' \
-              --output text | tail -20
+              --order-by LastEventTime \
+              --descending \
+              --limit 10 \
+              --query 'logStreams[*].logStreamName' \
+              --output text || echo "Failed to list log streams"
+            
+            # Try multiple approaches to find the right log stream
+            LOG_STREAM=""
+            
+            # Approach 1: Look for migration prefix
+            LOG_STREAM=$(aws logs describe-log-streams \
+              --log-group-name $LOG_GROUP \
+              --order-by LastEventTime \
+              --descending \
+              --limit 10 \
+              --query 'logStreams[?contains(logStreamName, `migration`)].logStreamName | [0]' \
+              --output text 2>/dev/null || echo "")
+            
+            # Approach 2: Look for task ID in stream name
+            if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
+              LOG_STREAM=$(aws logs describe-log-streams \
+                --log-group-name $LOG_GROUP \
+                --order-by LastEventTime \
+                --descending \
+                --limit 10 \
+                --query "logStreams[?contains(logStreamName, \`$MIGRATION_TASK_SHORT_ID\`)].logStreamName | [0]" \
+                --output text 2>/dev/null || echo "")
+            fi
+            
+            # Approach 3: Get the most recent stream
+            if [ -z "$LOG_STREAM" ] || [ "$LOG_STREAM" = "None" ]; then
+              LOG_STREAM=$(aws logs describe-log-streams \
+                --log-group-name $LOG_GROUP \
+                --order-by LastEventTime \
+                --descending \
+                --limit 1 \
+                --query 'logStreams[0].logStreamName' \
+                --output text 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "null" ]; then
+              echo "Found migration log stream: $LOG_STREAM"
+              echo "Migration logs:"
+              aws logs get-log-events \
+                --log-group-name $LOG_GROUP \
+                --log-stream-name $LOG_STREAM \
+                --start-time $(date -d '15 minutes ago' +%s)000 \
+                --query 'events[*].message' \
+                --output text | tail -30
+            else
+              echo "Could not find migration log stream"
+            fi
           else
-            echo "Could not fetch CloudWatch logs"
+            echo "No log group configured for migration task"
           fi
           
           if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "null" ]; then
