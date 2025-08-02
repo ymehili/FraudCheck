@@ -45,7 +45,7 @@ export function FileUpload({
     setError(null);
 
     // Check file type
-    if (!SUPPORTED_FILE_TYPES.includes(file.type as string)) {
+    if (!SUPPORTED_FILE_TYPES.includes(file.type as typeof SUPPORTED_FILE_TYPES[number])) {
       setError(`${ERROR_MESSAGES.INVALID_FILE_TYPE}. Supported formats: JPG, PNG, PDF`);
       return false;
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { api } from '@/lib/api';
 import { FileUploadResponse } from '@/types/api';
@@ -163,31 +163,113 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
   };
 }
 
+// Individual upload state for batch processing
+interface UploadState {
+  file: File;
+  isUploading: boolean;
+  progress: number;
+  error: string | null;
+  uploadedFile: FileUploadResponse | null;
+}
+
 // Batch upload hook for multiple files
 export function useBatchFileUpload(options: UseFileUploadOptions = {}) {
-  const [uploads, setUploads] = useState<Map<string, UseFileUploadReturn>>(new Map());
+  const { getToken } = useAuth();
+  const [uploads, setUploads] = useState<Map<string, UploadState>>(new Map());
   const [totalProgress, setTotalProgress] = useState(0);
   const [isAnyUploading, setIsAnyUploading] = useState(false);
 
+  const uploadFile = useCallback(async (file: File, fileId: string): Promise<FileUploadResponse | null> => {
+    try {
+      // Update upload state to uploading
+      setUploads(prev => new Map(prev.set(fileId, {
+        file,
+        isUploading: true,
+        progress: 0,
+        error: null,
+        uploadedFile: null,
+      })));
+
+      // Get authentication token
+      const token = await getToken();
+      if (!token) {
+        throw new Error(ERROR_MESSAGES.UNAUTHORIZED);
+      }
+
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploads(prev => {
+          const current = prev.get(fileId);
+          if (current && current.progress < 90) {
+            return new Map(prev.set(fileId, {
+              ...current,
+              progress: current.progress + Math.random() * 20,
+            }));
+          }
+          return prev;
+        });
+      }, 200);
+
+      // Upload the file
+      const response = await api.uploadFile(file, token);
+
+      // Complete progress
+      clearInterval(progressInterval);
+      
+      // Update upload state to completed
+      setUploads(prev => new Map(prev.set(fileId, {
+        file,
+        isUploading: false,
+        progress: 100,
+        error: null,
+        uploadedFile: response,
+      })));
+
+      // Call success callback
+      if (options.onSuccess) {
+        options.onSuccess(response);
+      }
+
+      return response;
+    } catch (error) {
+      let errorMessage: string = ERROR_MESSAGES.UPLOAD_FAILED;
+      
+      if (error instanceof Error) {
+        if (error.message.includes('unauthorized') || error.message.includes('401')) {
+          errorMessage = ERROR_MESSAGES.UNAUTHORIZED;
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = ERROR_MESSAGES.NETWORK_ERROR;
+        } else if (error.message.includes('server') || error.message.includes('500')) {
+          errorMessage = ERROR_MESSAGES.SERVER_ERROR;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      // Update upload state to error
+      setUploads(prev => new Map(prev.set(fileId, {
+        file,
+        isUploading: false,
+        progress: 0,
+        error: errorMessage,
+        uploadedFile: null,
+      })));
+
+      // Call error callback
+      if (options.onError) {
+        options.onError(errorMessage);
+      }
+
+      console.error('File upload failed:', error);
+      return null;
+    }
+  }, [getToken, options]);
+
   const addUpload = useCallback((file: File) => {
     const fileId = `${file.name}-${file.size}-${file.lastModified}`;
-    const uploadHook = useFileUpload({
-      ...options,
-      onSuccess: (response) => {
-        options.onSuccess?.(response);
-        updateTotalProgress();
-      },
-      onError: (error) => {
-        options.onError?.(error);
-        updateTotalProgress();
-      },
-    });
-
-    setUploads(prev => new Map(prev.set(fileId, uploadHook)));
-    uploadHook.uploadFile(file);
-
+    uploadFile(file, fileId);
     return fileId;
-  }, [options]);
+  }, [uploadFile]);
 
   const updateTotalProgress = useCallback(() => {
     let totalProgress = 0;
@@ -211,11 +293,15 @@ export function useBatchFileUpload(options: UseFileUploadOptions = {}) {
   }, []);
 
   const resetAll = useCallback(() => {
-    uploads.forEach(upload => upload.reset());
     setUploads(new Map());
     setTotalProgress(0);
     setIsAnyUploading(false);
-  }, [uploads]);
+  }, []);
+
+  // Update total progress when uploads change
+  React.useEffect(() => {
+    updateTotalProgress();
+  }, [updateTotalProgress]);
 
   return {
     uploads: Array.from(uploads.entries()),

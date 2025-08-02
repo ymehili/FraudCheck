@@ -28,10 +28,7 @@ import Link from 'next/link';
 interface DashboardFilters {
   start_date?: string;
   end_date?: string;
-  min_risk_score?: number;
-  max_risk_score?: number;
-  status?: string;
-  search?: string;
+  risk_threshold?: number;
 }
 
 export default function DashboardPage() {
@@ -69,23 +66,17 @@ export default function DashboardPage() {
     // Convert filter format from FilterControls to API format
     const apiFilters: DashboardFilters = {};
     
-    if (newFilters.dateRange?.start) {
-      apiFilters.start_date = newFilters.dateRange.start;
+    const dateRange = newFilters.dateRange as { start?: string; end?: string } | undefined;
+    const riskScore = newFilters.riskScore as { min?: number; max?: number } | undefined;
+    
+    if (dateRange?.start) {
+      apiFilters.start_date = dateRange.start;
     }
-    if (newFilters.dateRange?.end) {
-      apiFilters.end_date = newFilters.dateRange.end;
+    if (dateRange?.end) {
+      apiFilters.end_date = dateRange.end;
     }
-    if (newFilters.riskScore?.min !== undefined && newFilters.riskScore.min > 0) {
-      apiFilters.min_risk_score = newFilters.riskScore.min;
-    }
-    if (newFilters.riskScore?.max !== undefined && newFilters.riskScore.max < 100) {
-      apiFilters.max_risk_score = newFilters.riskScore.max;
-    }
-    if (newFilters.status && newFilters.status !== 'all') {
-      apiFilters.status = newFilters.status;
-    }
-    if (newFilters.search) {
-      apiFilters.search = newFilters.search;
+    if (riskScore?.min !== undefined && riskScore.min > 0) {
+      apiFilters.risk_threshold = riskScore.min;
     }
     
     setFilters(apiFilters);
@@ -146,7 +137,7 @@ export default function DashboardPage() {
         {/* Filters */}
         <div className="mb-8">
           <FilterControls
-            filters={filters}
+            filters={filters as Record<string, unknown>}
             onFiltersChange={handleFiltersChange}
             isLoading={isLoading}
           />

@@ -220,7 +220,7 @@ export default function HistoryPage() {
               </CardHeader>
               <CardContent>
                 <FilterControls
-                  filters={filters}
+                  filters={filters as Record<string, unknown>}
                   onFiltersChange={handleFiltersChange}
                   isLoading={isLoading}
                   showStatusFilter={true}

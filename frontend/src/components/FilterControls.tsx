@@ -90,7 +90,7 @@ export function FilterControls({
   }, []);
 
   const resetFilters = useCallback(() => {
-    setFilters(defaultFilters);
+    setFilters(defaultFilters as unknown as Record<string, unknown>);
   }, []);
 
   const hasActiveFilters = useCallback(() => {
