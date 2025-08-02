@@ -73,7 +73,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
 
-      - name: Update backend service
+      - name: Deploy or update backend service
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
@@ -94,68 +94,87 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
-          echo "Updating ECS service..."
-          aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_BACKEND_SERVICE \
-            --task-definition $NEW_TASK_DEF_ARN \
-            --force-new-deployment
+          echo "Checking if backend service exists..."
+          if aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE --query 'services[0].serviceName' --output text 2>/dev/null | grep -q $ECS_BACKEND_SERVICE; then
+            echo "Service exists, updating..."
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_BACKEND_SERVICE \
+              --task-definition $NEW_TASK_DEF_ARN \
+              --force-new-deployment
+          else
+            echo "Service does not exist. Please run Terraform to create the infrastructure first."
+            echo "Run: cd infrastructure/terraform && terraform apply"
+            exit 1
+          fi
 
-      - name: Update celery worker service
+      - name: Deploy or update celery worker service
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
         run: |
-          echo "Getting current task definition..."
-          TASK_DEFINITION=$(aws ecs describe-task-definition \
-            --task-definition $ECS_CELERY_SERVICE \
-            --query 'taskDefinition' \
-            --output json)
-          
-          echo "Updating image in task definition..."
-          NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" \
-            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
-          
-          echo "Registering new task definition..."
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEFINITION" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          
-          echo "Updating ECS service..."
-          aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_CELERY_SERVICE \
-            --task-definition $NEW_TASK_DEF_ARN \
-            --force-new-deployment
+          echo "Checking if celery worker service exists..."
+          if aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_CELERY_SERVICE --query 'services[0].serviceName' --output text 2>/dev/null | grep -q $ECS_CELERY_SERVICE; then
+            echo "Getting current task definition..."
+            TASK_DEFINITION=$(aws ecs describe-task-definition \
+              --task-definition $ECS_CELERY_SERVICE \
+              --query 'taskDefinition' \
+              --output json)
+            
+            echo "Updating image in task definition..."
+            NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" \
+              '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+            
+            echo "Registering new task definition..."
+            NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+              --cli-input-json "$NEW_TASK_DEFINITION" \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+            
+            echo "Updating ECS service..."
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_CELERY_SERVICE \
+              --task-definition $NEW_TASK_DEF_ARN \
+              --force-new-deployment
+          else
+            echo "Celery worker service does not exist yet. Skipping for now."
+            echo "This service will be created when Terraform infrastructure is applied."
+          fi
 
-      - name: Update frontend service
+      - name: Deploy or update frontend service
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
         run: |
-          echo "Getting current task definition..."
-          TASK_DEFINITION=$(aws ecs describe-task-definition \
-            --task-definition $ECS_FRONTEND_SERVICE \
-            --query 'taskDefinition' \
-            --output json)
-          
-          echo "Updating image in task definition..."
-          NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" \
-            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
-          
-          echo "Registering new task definition..."
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEFINITION" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          
-          echo "Updating ECS service..."
-          aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_FRONTEND_SERVICE \
-            --task-definition $NEW_TASK_DEF_ARN \
-            --force-new-deployment
+          echo "Checking if frontend service exists..."
+          if aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_FRONTEND_SERVICE --query 'services[0].serviceName' --output text 2>/dev/null | grep -q $ECS_FRONTEND_SERVICE; then
+            echo "Getting current task definition..."
+            TASK_DEFINITION=$(aws ecs describe-task-definition \
+              --task-definition $ECS_FRONTEND_SERVICE \
+              --query 'taskDefinition' \
+              --output json)
+            
+            echo "Updating image in task definition..."
+            NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" \
+              '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+            
+            echo "Registering new task definition..."
+            NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+              --cli-input-json "$NEW_TASK_DEFINITION" \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+            
+            echo "Updating ECS service..."
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_FRONTEND_SERVICE \
+              --task-definition $NEW_TASK_DEF_ARN \
+              --force-new-deployment
+          else
+            echo "Frontend service does not exist yet. Skipping for now."
+            echo "This service will be created when Terraform infrastructure is applied."
+          fi
 
       - name: Run database migrations
         run: |
