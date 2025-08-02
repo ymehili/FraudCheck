@@ -186,9 +186,93 @@ jobs:
             --query 'taskDefinition' \
             --output json)
           
-          # Create a one-time migration task
+          # Create a test task first to check environment
+          echo "Creating environment test task..."
+          TEST_TASK_DEF=$(echo $TASK_DEFINITION | jq \
+            '.containerDefinitions[0].command = ["python", "test_db_env.py"] | 
+             .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "env-test" |
+             del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
+             del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          # Register test task definition
+          TEST_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$TEST_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "Running environment test..."
+          
+          # Get network configuration
+          PRIVATE_SUBNET=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Type,Values=private" \
+            --query 'Subnets[0].SubnetId' \
+            --output text)
+          
+          SECURITY_GROUP=$(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=checkguard-ecs-sg" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
+          
+          echo "Using subnet: $PRIVATE_SUBNET"
+          echo "Using security group: $SECURITY_GROUP"
+          
+          # Run test task
+          TEST_TASK_ID=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $TEST_TASK_ARN \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Environment test task started: $TEST_TASK_ID"
+          
+          # Wait for test to complete
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TEST_TASK_ID
+          
+          # Check test results
+          TEST_EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TEST_TASK_ID \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          echo "Environment test exit code: $TEST_EXIT_CODE"
+          
+          if [ "$TEST_EXIT_CODE" != "0" ]; then
+            echo "Environment test failed. Checking logs..."
+            
+            # Try to get logs
+            LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
+            if [ -n "$LOG_GROUP" ]; then
+              LOG_STREAM=$(aws logs describe-log-streams \
+                --log-group-name $LOG_GROUP \
+                --order-by LastEventTime \
+                --descending \
+                --limit 5 \
+                --query 'logStreams[?contains(logStreamName, `env-test`)].logStreamName | [0]' \
+                --output text 2>/dev/null || echo "")
+              
+              if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ]; then
+                echo "Environment test logs:"
+                aws logs get-log-events \
+                  --log-group-name $LOG_GROUP \
+                  --log-stream-name $LOG_STREAM \
+                  --query 'events[*].message' \
+                  --output text
+              fi
+            fi
+            
+            echo "Environment test failed. Aborting migration."
+            exit 1
+          fi
+          
+          echo "Environment test passed. Proceeding with migration..."
+          
+          # Create a one-time migration task with enhanced logging
           MIGRATION_TASK_DEF=$(echo $TASK_DEFINITION | jq \
-            '.containerDefinitions[0].command = ["python", "-m", "alembic", "upgrade", "head"] | 
+            '.containerDefinitions[0].command = ["python", "run_migrations.py"] | 
+             .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "migration" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
@@ -198,29 +282,80 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
+          echo "Registered migration task definition: $MIGRATION_TASK_ARN"
+          
           # Run migration task
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition $MIGRATION_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
           
           echo "Migration task started: $TASK_ARN"
           
-          # Wait for migration to complete
-          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
+          # Monitor task progress
+          echo "Waiting for migration task to complete..."
+          for i in {1..60}; do
+            TASK_STATUS=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $TASK_ARN \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+            
+            echo "Task status: $TASK_STATUS (check $i/60)"
+            
+            if [ "$TASK_STATUS" = "STOPPED" ]; then
+              break
+            fi
+            
+            sleep 10
+          done
           
-          # Check migration task exit code
-          EXIT_CODE=$(aws ecs describe-tasks \
+          # Get detailed task information
+          TASK_DETAILS=$(aws ecs describe-tasks \
             --cluster $ECS_CLUSTER \
             --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
+            --query 'tasks[0]' \
+            --output json)
           
-          if [ "$EXIT_CODE" != "0" ]; then
+          echo "Task details:"
+          echo "$TASK_DETAILS" | jq '.containers[0] | {name, exitCode, reason}'
+          
+          # Get exit code
+          EXIT_CODE=$(echo "$TASK_DETAILS" | jq -r '.containers[0].exitCode // "null"')
+          STOP_REASON=$(echo "$TASK_DETAILS" | jq -r '.containers[0].reason // "Unknown"')
+          
+          echo "Migration task exit code: $EXIT_CODE"
+          echo "Stop reason: $STOP_REASON"
+          
+          # Get CloudWatch logs for debugging
+          LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name $LOG_GROUP \
+            --order-by LastEventTime \
+            --descending \
+            --limit 5 \
+            --query 'logStreams[?contains(logStreamName, `migration`)].logStreamName | [0]' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ]; then
+            echo "Fetching migration logs from CloudWatch..."
+            aws logs get-log-events \
+              --log-group-name $LOG_GROUP \
+              --log-stream-name $LOG_STREAM \
+              --query 'events[*].message' \
+              --output text | tail -20
+          else
+            echo "Could not fetch CloudWatch logs"
+          fi
+          
+          if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "null" ]; then
             echo "Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          elif [ "$EXIT_CODE" = "null" ]; then
+            echo "Migration task did not complete properly (no exit code)"
             exit 1
           fi
           
