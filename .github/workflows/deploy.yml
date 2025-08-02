@@ -1,0 +1,356 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches: [deploy]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_BACKEND_REPOSITORY: checkguard-backend
+  ECR_FRONTEND_REPOSITORY: checkguard-frontend
+  ECS_CLUSTER: checkguard-cluster
+  ECS_BACKEND_SERVICE: backend
+  ECS_FRONTEND_SERVICE: frontend
+  ECS_CELERY_SERVICE: celery-worker
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          python -m pytest tests/ -v --tb=short
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run frontend lint
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Run frontend type check
+        run: |
+          cd frontend
+          npm run type-check
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get commit SHA
+        id: get-sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
+        run: |
+          echo "Building backend image..."
+          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG backend/
+          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest backend/
+          
+          echo "Pushing backend image to ECR..."
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
+
+      - name: Build frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
+        run: |
+          echo "Building frontend image..."
+          docker build -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG frontend/
+          docker build -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest frontend/
+          
+          echo "Pushing frontend image to ECR..."
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
+
+      - name: Update backend service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
+        run: |
+          echo "Getting current task definition..."
+          TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition $ECS_BACKEND_SERVICE \
+            --query 'taskDefinition' \
+            --output json)
+          
+          echo "Updating image in task definition..."
+          NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          echo "Registering new task definition..."
+          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
+            --cli-input-json file:///dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "Updating ECS service..."
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_BACKEND_SERVICE \
+            --task-definition $NEW_TASK_DEF_ARN \
+            --force-new-deployment
+
+      - name: Update celery worker service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
+        run: |
+          echo "Getting current task definition..."
+          TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition $ECS_CELERY_SERVICE \
+            --query 'taskDefinition' \
+            --output json)
+          
+          echo "Updating image in task definition..."
+          NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          echo "Registering new task definition..."
+          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
+            --cli-input-json file:///dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "Updating ECS service..."
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_CELERY_SERVICE \
+            --task-definition $NEW_TASK_DEF_ARN \
+            --force-new-deployment
+
+      - name: Update frontend service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
+        run: |
+          echo "Getting current task definition..."
+          TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition $ECS_FRONTEND_SERVICE \
+            --query 'taskDefinition' \
+            --output json)
+          
+          echo "Updating image in task definition..."
+          NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          echo "Registering new task definition..."
+          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
+            --cli-input-json file:///dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "Updating ECS service..."
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_FRONTEND_SERVICE \
+            --task-definition $NEW_TASK_DEF_ARN \
+            --force-new-deployment
+
+      - name: Run database migrations
+        run: |
+          echo "Running database migrations..."
+          
+          # Get the current backend task definition
+          TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition $ECS_BACKEND_SERVICE \
+            --query 'taskDefinition' \
+            --output json)
+          
+          # Create a one-time migration task
+          MIGRATION_TASK_DEF=$(echo $TASK_DEFINITION | jq \
+            '.containerDefinitions[0].command = ["python", "-m", "alembic", "upgrade", "head"] | 
+             del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
+             del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
+          
+          # Register migration task definition
+          MIGRATION_TASK_ARN=$(echo $MIGRATION_TASK_DEF | aws ecs register-task-definition \
+            --cli-input-json file:///dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          # Run migration task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $MIGRATION_TASK_ARN \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Migration task started: $TASK_ARN"
+          
+          # Wait for migration to complete
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
+          
+          # Check migration task exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "Database migration completed successfully"
+
+      - name: Wait for deployment to complete
+        run: |
+          echo "Waiting for backend service to reach steady state..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_BACKEND_SERVICE
+          
+          echo "Waiting for frontend service to reach steady state..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_FRONTEND_SERVICE
+          
+          echo "Waiting for celery worker service to reach steady state..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_CELERY_SERVICE
+
+      - name: Health check
+        run: |
+          # Get ALB DNS name
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names checkguard-alb \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)
+          
+          echo "ALB DNS: $ALB_DNS"
+          
+          # Health check with retry logic
+          for i in {1..30}; do
+            echo "Health check attempt $i..."
+            if curl -f -s http://$ALB_DNS/health > /dev/null; then
+              echo "✅ Application health check passed!"
+              break
+            fi
+            
+            if [ $i -eq 30 ]; then
+              echo "❌ Health check failed after 30 attempts"
+              exit 1
+            fi
+            
+            echo "Health check failed, retrying in 10 seconds..."
+            sleep 10
+          done
+          
+          echo "🚀 Deployment completed successfully!"
+          echo "Application URL: http://$ALB_DNS"
+          echo "API Documentation: http://$ALB_DNS/docs"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "::notice title=Deployment Success::✅ CheckGuard AI deployed successfully to AWS ECS"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "::error title=Deployment Failed::❌ CheckGuard AI deployment to AWS ECS failed"
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: failure()
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rollback services
+        run: |
+          echo "🔄 Rolling back to previous deployment..."
+          
+          # Force new deployment to rollback to previous version
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_BACKEND_SERVICE \
+            --force-new-deployment
+          
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_FRONTEND_SERVICE \
+            --force-new-deployment
+          
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_CELERY_SERVICE \
+            --force-new-deployment
+          
+          echo "⏳ Waiting for rollback to complete..."
+          
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_BACKEND_SERVICE $ECS_FRONTEND_SERVICE $ECS_CELERY_SERVICE
+          
+          echo "✅ Rollback completed successfully"
+
+      - name: Notify rollback
+        run: |
+          echo "::warning title=Rollback Completed::🔄 Services have been rolled back to the previous version"

@@ -1,0 +1,194 @@
+# Production Docker Compose Configuration
+# Used for local production testing and ECS reference
+version: '3.8'
+
+services:
+  # Backend API (Production)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkguard-backend-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - CLAMD_HOST=${CLAMD_HOST}
+      - CLAMD_PORT=${CLAMD_PORT}
+      - DEBUG=false
+    env_file:
+      - .env.production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    networks:
+      - checkguard-prod-network
+
+  # Celery Worker (Production)
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkguard-celery-worker-prod
+    command: python celery_worker.py
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - CLAMD_HOST=${CLAMD_HOST}
+      - CLAMD_PORT=${CLAMD_PORT}
+      - DEBUG=false
+    env_file:
+      - .env.production
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.tasks.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    networks:
+      - checkguard-prod-network
+
+  # Frontend Application (Production)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: checkguard-frontend-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - checkguard-prod-network
+
+  # PostgreSQL Database (For local production testing)
+  postgres:
+    image: postgres:15-alpine
+    container_name: checkguard-postgres-prod
+    environment:
+      POSTGRES_DB: checkguard
+      POSTGRES_USER: checkguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-checkguard}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U checkguard -d checkguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - checkguard-prod-network
+
+  # Redis Cache (For local production testing)
+  redis:
+    image: redis:7-alpine
+    container_name: checkguard-redis-prod
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - checkguard-prod-network
+
+  # ClamAV Daemon (For local production testing)
+  clamav:
+    image: clamav/clamav:stable
+    platform: linux/amd64
+    container_name: checkguard-clamav-prod
+    mem_limit: 4g
+    mem_reservation: 3g
+    environment:
+      - CLAMAV_NO_FRESHCLAMD=false
+      - CLAMAV_NO_CLAMD=false
+      - CLAMD_CONF_LogVerbose=yes
+      - CLAMD_CONF_DatabaseDirectory=/var/lib/clamav
+      - CLAMD_CONF_LocalSocket=/tmp/clamd.sock
+      - CLAMD_CONF_LocalSocketGroup=clamav
+      - CLAMD_CONF_LocalSocketMode=666
+      - CLAMD_CONF_FixStaleSocket=yes
+      - CLAMD_CONF_TCPSocket=3310
+    volumes:
+      - clamav_prod_data:/var/lib/clamav
+      - clamav_prod_socket:/tmp
+    healthcheck:
+      test: ["CMD", "test", "-S", "/tmp/clamd.sock"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 3m
+    restart: unless-stopped
+    networks:
+      - checkguard-prod-network
+
+volumes:
+  postgres_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  clamav_prod_data:
+    driver: local
+  clamav_prod_socket:
+    driver: local
+
+networks:
+  checkguard-prod-network:
+    driver: bridge

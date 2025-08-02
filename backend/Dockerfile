@@ -1,5 +1,5 @@
-# Backend Dockerfile
-FROM python:3.11-slim
+# Production Backend Dockerfile - Multi-stage build
+FROM python:3.11-slim as dependencies
 
 # Set working directory
 WORKDIR /app
@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libglib2.0-0 \
     libgtk-3-0 \
     pkg-config \
     gcc \
@@ -24,33 +23,64 @@ RUN apt-get update && apt-get install -y \
     libmagic-dev \
     clamav \
     clamdscan \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get purge -y --auto-remove gcc g++ pkg-config
 
-# Copy requirements first for better caching
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Production runtime stage
+FROM python:3.11-slim as runtime
+
+# Install only runtime system dependencies
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgtk-3-0 \
+    curl \
+    postgresql-client \
+    poppler-utils \
+    libmagic1 \
+    clamav \
+    clamdscan \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy Python packages from dependencies stage
+COPY --from=dependencies /root/.local /home/appuser/.local
 
 # Copy application code
-COPY . .
+COPY --chown=appuser:appuser . .
 
 # Make scripts executable
-RUN chmod +x init-db.sh entrypoint.sh
+RUN chmod +x entrypoint.sh
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Switch to non-root user
 USER appuser
+
+# Set PATH for user-installed packages
+ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Expose port
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production command (no reload)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
