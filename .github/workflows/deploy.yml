@@ -216,11 +216,29 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
-          # Get network configuration
+          # Get network configuration - use public subnets for migration tasks that need AWS services access
+          # Try private subnets first, then fall back to public if needed
           PRIVATE_SUBNET=$(aws ec2 describe-subnets \
-            --filters "Name=tag:Type,Values=private" \
+            --filters "Name=tag:Tier,Values=app" "Name=tag:Type,Values=private" \
             --query 'Subnets[0].SubnetId' \
             --output text)
+          
+          # If no app subnet found, try general private subnets
+          if [ "$PRIVATE_SUBNET" = "None" ] || [ -z "$PRIVATE_SUBNET" ]; then
+            PRIVATE_SUBNET=$(aws ec2 describe-subnets \
+              --filters "Name=tag:Type,Values=private" \
+              --query 'Subnets[?!contains(Tags[?Key==`Tier`].Value || [`unknown`], `database`)].SubnetId | [0]' \
+              --output text)
+          fi
+          
+          # If still no private subnet, use public subnet for migration
+          if [ "$PRIVATE_SUBNET" = "None" ] || [ -z "$PRIVATE_SUBNET" ]; then
+            echo "No suitable private subnet found, using public subnet for migration tasks"
+            PRIVATE_SUBNET=$(aws ec2 describe-subnets \
+              --filters "Name=tag:Type,Values=public" \
+              --query 'Subnets[0].SubnetId' \
+              --output text)
+          fi
           
           SECURITY_GROUP=$(aws ec2 describe-security-groups \
             --filters "Name=tag:Name,Values=checkguard-ecs-sg" \
@@ -230,12 +248,16 @@ jobs:
           echo "Using subnet: $PRIVATE_SUBNET"
           echo "Using security group: $SECURITY_GROUP"
           
-          # Run simple test task
+          # Debug subnet information
+          echo "Subnet details:"
+          aws ec2 describe-subnets --subnet-ids $PRIVATE_SUBNET --query 'Subnets[0].{SubnetId: SubnetId, CidrBlock: CidrBlock, AvailabilityZone: AvailabilityZone, Tags: Tags}' --output json
+          
+          # Run simple test task with public IP to access AWS services
           SIMPLE_TEST_TASK_ID=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition $SIMPLE_TEST_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
           
@@ -358,12 +380,12 @@ jobs:
           echo "Using subnet: $PRIVATE_SUBNET"
           echo "Using security group: $SECURITY_GROUP"
           
-          # Run test task
+          # Run test task with public IP for AWS services access
           TEST_TASK_ID=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition $TEST_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
           
@@ -495,12 +517,12 @@ jobs:
           
           echo "Registered migration task definition: $MIGRATION_TASK_ARN"
           
-          # Run migration task
+          # Run migration task with public IP for AWS services access
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition $MIGRATION_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
           
