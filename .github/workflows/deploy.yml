@@ -89,8 +89,8 @@ jobs:
             '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
           echo "Registering new task definition..."
-          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEFINITION" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
@@ -117,8 +117,8 @@ jobs:
             '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
           echo "Registering new task definition..."
-          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEFINITION" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
@@ -145,8 +145,8 @@ jobs:
             '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
           echo "Registering new task definition..."
-          NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEFINITION | aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEFINITION" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
@@ -174,8 +174,8 @@ jobs:
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
           # Register migration task definition
-          MIGRATION_TASK_ARN=$(echo $MIGRATION_TASK_DEF | aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          MIGRATION_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$MIGRATION_TASK_DEF" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
