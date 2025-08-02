@@ -189,20 +189,24 @@ jobs:
           # Debug task definition logging configuration
           echo "Checking task definition logging configuration..."
           LOG_CONFIG=$(echo $TASK_DEFINITION | jq '.containerDefinitions[0].logConfiguration')
-          echo "Log configuration: $LOG_CONFIG"
+          echo "Original log configuration: $LOG_CONFIG"
           
-          # First, run a simple connectivity test
+          # Get the original log group name
+          ORIGINAL_LOG_GROUP=$(echo $TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration.options."awslogs-group"')
+          echo "Original log group: $ORIGINAL_LOG_GROUP"
+          
+          # Create our custom log group if it doesn't exist
+          CUSTOM_LOG_GROUP="/ecs/checkguard-backend"
+          echo "Ensuring custom log group exists: $CUSTOM_LOG_GROUP"
+          
+          aws logs create-log-group --log-group-name $CUSTOM_LOG_GROUP --region us-east-2 || echo "Log group already exists or creation failed"
+          
+          # First, run a simple connectivity test using the original log group
           echo "Creating simple connectivity test task..."
           SIMPLE_TEST_DEF=$(echo $TASK_DEFINITION | jq \
+            --arg log_group "$ORIGINAL_LOG_GROUP" \
             '.containerDefinitions[0].command = ["python", "-c", "import os; print(\"Python works!\"); print(\"DATABASE_URL:\", \"SET\" if os.environ.get(\"DATABASE_URL\") else \"NOT SET\"); import sys; sys.exit(0)"] | 
-             .containerDefinitions[0].logConfiguration = {
-               "logDriver": "awslogs",
-               "options": {
-                 "awslogs-group": "/ecs/checkguard-backend",
-                 "awslogs-region": "us-east-2",
-                 "awslogs-stream-prefix": "simple-test"
-               }
-             } |
+             .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "simple-test" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
           
@@ -248,7 +252,67 @@ jobs:
           
           echo "Simple test exit code: $SIMPLE_EXIT_CODE"
           
-          if [ "$SIMPLE_EXIT_CODE" != "0" ]; then
+          if [ "$SIMPLE_EXIT_CODE" != "0" ] || [ "$SIMPLE_EXIT_CODE" = "null" ]; then
+            echo "Basic connectivity test failed. Let's get detailed information..."
+            
+            # Get detailed task information
+            SIMPLE_TASK_DETAILS=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $SIMPLE_TEST_TASK_ID \
+              --query 'tasks[0]' \
+              --output json)
+            
+            echo "Simple test task details:"
+            echo "$SIMPLE_TASK_DETAILS" | jq '{
+              lastStatus: .lastStatus,
+              desiredStatus: .desiredStatus,
+              stoppedReason: .stoppedReason,
+              containers: .containers[0] | {
+                name: .name,
+                lastStatus: .lastStatus,
+                exitCode: .exitCode,
+                reason: .reason,
+                networkInterfaces: .networkInterfaces
+              }
+            }'
+            
+            # Try to get logs from the original log group
+            echo "Trying to get logs from original log group: $ORIGINAL_LOG_GROUP"
+            
+            # Wait for logs to be available
+            sleep 30
+            
+            # List available log streams
+            echo "Available log streams in $ORIGINAL_LOG_GROUP:"
+            aws logs describe-log-streams \
+              --log-group-name $ORIGINAL_LOG_GROUP \
+              --order-by LastEventTime \
+              --descending \
+              --limit 5 \
+              --query 'logStreams[*].{name: logStreamName, lastEvent: lastEventTime}' \
+              --output table || echo "Failed to list log streams"
+            
+            # Try to get the most recent log stream
+            RECENT_STREAM=$(aws logs describe-log-streams \
+              --log-group-name $ORIGINAL_LOG_GROUP \
+              --order-by LastEventTime \
+              --descending \
+              --limit 1 \
+              --query 'logStreams[0].logStreamName' \
+              --output text 2>/dev/null || echo "")
+            
+            if [ -n "$RECENT_STREAM" ] && [ "$RECENT_STREAM" != "None" ]; then
+              echo "Getting logs from most recent stream: $RECENT_STREAM"
+              aws logs get-log-events \
+                --log-group-name $ORIGINAL_LOG_GROUP \
+                --log-stream-name $RECENT_STREAM \
+                --start-time $(date -d '15 minutes ago' +%s)000 \
+                --query 'events[*].message' \
+                --output text || echo "Failed to get log events"
+            else
+              echo "No log streams found"
+            fi
+            
             echo "Basic connectivity test failed. There's a fundamental issue with the ECS setup."
             exit 1
           fi
@@ -258,21 +322,11 @@ jobs:
           # Create a test task first to check environment
           echo "Creating environment test task..."
           TEST_TASK_DEF=$(echo $TASK_DEFINITION | jq \
+            --arg log_group "$ORIGINAL_LOG_GROUP" \
             '.containerDefinitions[0].command = ["python", "test_db_env.py"] | 
              .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "env-test" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
-          
-          # Ensure log configuration is properly set
-          TEST_TASK_DEF=$(echo $TEST_TASK_DEF | jq '
-            .containerDefinitions[0].logConfiguration = {
-              "logDriver": "awslogs",
-              "options": {
-                "awslogs-group": "/ecs/checkguard-backend",
-                "awslogs-region": "us-east-2",
-                "awslogs-stream-prefix": "env-test"
-              }
-            }')
           
           echo "Test task definition logging configuration:"
           echo $TEST_TASK_DEF | jq '.containerDefinitions[0].logConfiguration'
@@ -424,21 +478,11 @@ jobs:
           
           # Create a one-time migration task with enhanced logging
           MIGRATION_TASK_DEF=$(echo $TASK_DEFINITION | jq \
+            --arg log_group "$ORIGINAL_LOG_GROUP" \
             '.containerDefinitions[0].command = ["python", "run_migrations.py"] | 
              .containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix" = "migration" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
              del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy)')
-          
-          # Ensure log configuration is properly set
-          MIGRATION_TASK_DEF=$(echo $MIGRATION_TASK_DEF | jq '
-            .containerDefinitions[0].logConfiguration = {
-              "logDriver": "awslogs",
-              "options": {
-                "awslogs-group": "/ecs/checkguard-backend",
-                "awslogs-region": "us-east-2",
-                "awslogs-stream-prefix": "migration"
-              }
-            }')
           
           echo "Migration task definition logging configuration:"
           echo $MIGRATION_TASK_DEF | jq '.containerDefinitions[0].logConfiguration'
