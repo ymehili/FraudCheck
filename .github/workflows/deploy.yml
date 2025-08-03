@@ -193,7 +193,7 @@ jobs:
           MIGRATION_TASK_DEF=$(echo $LATEST_TASK_DEFINITION | jq \
             '.containerDefinitions[0].command = ["/bin/bash", "-c", "set -e; cd /app && PATH=/home/appuser/.local/bin:$PATH PYTHONPATH=/app python -m alembic -c alembic.ini upgrade head || (echo \"Migration failed\" && exit 1)"] |
             .containerDefinitions[0].entryPoint = [] |
-            .containerDefinitions[0].stopTimeout = 1800 |
+            .containerDefinitions[0].stopTimeout = 120 |
             .containerDefinitions[0].startTimeout = 600 |
             .containerDefinitions[0].essential = true |
             .taskRoleArn = .taskRoleArn |
