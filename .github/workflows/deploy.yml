@@ -191,9 +191,7 @@ jobs:
           
           # Create a migration-specific task definition with direct command
           MIGRATION_TASK_DEF=$(echo $LATEST_TASK_DEFINITION | jq \
-            '.containerDefinitions[0].command = ["/bin/bash", "-c", "set -e; cd /app && echo \"Running migrations with DATABASE_URL from secrets...\" && PATH=/home/appuser/.local/bin:$PATH PYTHONPATH=/app python -m alembic -c alembic.ini upgrade head || (echo \"Migration failed\" && exit 1)"] |
-            .containerDefinitions[0].entryPoint = [] |
-            .containerDefinitions[0].environment += [{"name": "INIT_DB", "value": "false"}, {"name": "RUN_MIGRATIONS", "value": "false"}] |
+            '.containerDefinitions[0].command = ["python", "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"] |
             .containerDefinitions[0].stopTimeout = 120 |
             .containerDefinitions[0].startTimeout = 600 |
             .containerDefinitions[0].essential = true |
