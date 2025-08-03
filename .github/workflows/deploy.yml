@@ -205,7 +205,7 @@ jobs:
             --cluster $ECS_CLUSTER \
             --task-definition $MIGRATION_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Tier,Values=app" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
           

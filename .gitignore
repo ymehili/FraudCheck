@@ -312,3 +312,7 @@ PRPs
 test.png
 backend/.initialized
 .claude
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
