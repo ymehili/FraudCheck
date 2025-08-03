@@ -83,6 +83,10 @@ module "ecs" {
       cpu    = 1024
       memory = 2048
 
+      # Use predefined IAM roles with correct permissions
+      task_role_arn      = aws_iam_role.ecs_task.arn
+      execution_role_arn = aws_iam_role.ecs_task_execution.arn
+
       # Container definitions
       container_definitions = {
         backend = {
@@ -212,6 +216,10 @@ module "ecs" {
       cpu    = 512
       memory = 1024
 
+      # Use predefined IAM roles with correct permissions
+      task_role_arn      = aws_iam_role.ecs_task.arn
+      execution_role_arn = aws_iam_role.ecs_task_execution.arn
+
       container_definitions = {
         frontend = {
           cpu       = 512
@@ -315,6 +323,10 @@ module "ecs" {
       
       # No load balancer for worker service
       create_load_balancer = false
+
+      # Use predefined IAM roles with correct permissions
+      task_role_arn      = aws_iam_role.ecs_task.arn
+      execution_role_arn = aws_iam_role.ecs_task_execution.arn
 
       container_definitions = {
         worker = {
