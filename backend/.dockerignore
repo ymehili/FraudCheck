@@ -79,4 +79,4 @@ uploads/
 temp/
 
 # Alembic
-alembic.ini
+# alembic.ini - commented out because we need this for migrations
