@@ -124,7 +124,7 @@ module "ecs" {
           secrets = [
             {
               name      = "DATABASE_URL"
-              valueFrom = aws_secretsmanager_secret.database.arn
+              valueFrom = "${aws_secretsmanager_secret.database.arn}:url::"
             },
             {
               name      = "CLERK_SECRET_KEY"
@@ -346,7 +346,7 @@ module "ecs" {
           secrets = [
             {
               name      = "DATABASE_URL"
-              valueFrom = aws_secretsmanager_secret.database.arn
+              valueFrom = "${aws_secretsmanager_secret.database.arn}:url::"
             },
             {
               name      = "CELERY_BROKER_URL"
