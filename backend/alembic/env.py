@@ -1,10 +1,19 @@
 import asyncio
+import sys
+import os
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
+
+# Add the current directory to Python path to ensure app imports work
+# Get the directory containing this file (alembic/) and then go up one level to the backend root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_root = os.path.dirname(current_dir)
+sys.path.insert(0, backend_root)
+
 from app.database import Base
 
 # this is the Alembic Config object, which provides
