@@ -180,18 +180,64 @@ jobs:
         run: |
           echo "Running database migrations..."
           
-          # For now, we'll skip automatic migrations to prevent deployment failures
-          # This should be run manually after deployment
-          echo "⚠️  Automatic migrations are disabled. Please run migrations manually:"
-          echo "   aws ecs run-task --cluster $ECS_CLUSTER --task-definition backend:latest --launch-type FARGATE \\"
-          echo "     --network-configuration 'awsvpcConfiguration={subnets=[subnet-id],securityGroups=[sg-id],assignPublicIp=DISABLED}' \\"
-          echo "     --overrides '{\"containerOverrides\":[{\"name\":\"backend\",\"command\":[\"python\",\"-m\",\"alembic\",\"upgrade\",\"head\"]}]}'"
-          echo ""
-          echo "📝 Migration command has been updated in the deployment workflow."
-          echo "   The issue with exit code 255 was due to alembic configuration or database connectivity."
-          echo "   Manual migration allows for better debugging if needed."
+          # Get the latest backend task definition (the one we just deployed)
+          LATEST_TASK_DEFINITION=$(aws ecs describe-task-definition \
+            --task-definition $ECS_BACKEND_SERVICE \
+            --include TAGS \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
           
-          echo "✅ Deployment continues without automatic migration"
+          echo "Using task definition: $LATEST_TASK_DEFINITION"
+          
+          # Run migration task using environment variable approach
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition $LATEST_TASK_DEFINITION \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Tier,Values=app" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"backend","environment":[{"name":"RUN_MIGRATIONS","value":"true"},{"name":"INIT_DB","value":"false"}]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Migration task started: $TASK_ARN"
+          
+          # Wait for migration to complete
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
+          
+          # Check migration task exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code: $EXIT_CODE"
+            
+            # Get more details about the failure
+            STOPPED_REASON=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $TASK_ARN \
+              --query 'tasks[0].stoppedReason' \
+              --output text)
+            
+            echo "Stopped reason: $STOPPED_REASON"
+            
+            # Try to get logs from CloudWatch
+            LOG_GROUP="/aws/ecs/backend/backend-20250802155036857500000027"
+            LOG_STREAM="ecs/backend/$(echo $TASK_ARN | cut -d'/' -f3)"
+            echo "Checking logs in $LOG_GROUP/$LOG_STREAM"
+            
+            aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$LOG_STREAM" \
+              --query 'events[].message' \
+              --output text || echo "No logs available"
+            
+            exit 1
+          fi
+          
+          echo "Database migration completed successfully"
 
       - name: Wait for deployment to complete
         run: |

@@ -31,6 +31,20 @@ else
     echo -e "${YELLOW}⏭️ Skipping initialization (already done)${NC}"
 fi
 
+# Check if we should run migrations instead of starting the server
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo -e "${YELLOW}🔄 Running database migrations...${NC}"
+    cd /app
+    python -m alembic upgrade head
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Database migrations completed successfully${NC}"
+        exit 0
+    else
+        echo -e "${RED}❌ Database migrations failed${NC}"
+        exit 1
+    fi
+fi
+
 echo -e "${GREEN}🌟 Starting FastAPI server...${NC}"
 
 # Start the application
