@@ -342,7 +342,7 @@ resource "aws_secretsmanager_secret_version" "database" {
     host     = module.rds.db_instance_endpoint
     port     = module.rds.db_instance_port
     dbname   = module.rds.db_instance_name
-    url      = "postgresql+asyncpg://${module.rds.db_instance_username}:${random_password.db_password.result}@${module.rds.db_instance_endpoint}:${module.rds.db_instance_port}/${module.rds.db_instance_name}"
+    url      = "postgresql+asyncpg://${module.rds.db_instance_username}:${random_password.db_password.result}@${module.rds.db_instance_endpoint}/${module.rds.db_instance_name}"
   })
 }
 
