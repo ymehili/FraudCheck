@@ -228,7 +228,9 @@ resource "aws_iam_role_policy" "github_actions_policy" {
         ]
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
-          aws_iam_role.ecs_task.arn
+          "arn:aws:iam::233442448767:role/backend-*",
+          "arn:aws:iam::233442448767:role/frontend-*",
+          "arn:aws:iam::233442448767:role/celery-worker-*"
         ]
       },
       {
