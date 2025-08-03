@@ -385,8 +385,8 @@ jobs:
               break
             fi
             
-            if [ $i -eq 30 ]; then
-              echo "❌ Health check failed after 30 attempts"
+            if [ $i -eq 10 ]; then
+              echo "❌ Health check failed after 10 attempts"
               exit 1
             fi
             
