@@ -191,8 +191,15 @@ jobs:
           
           # Create a migration-specific task definition with direct command
           MIGRATION_TASK_DEF=$(echo $LATEST_TASK_DEFINITION | jq \
-            '.containerDefinitions[0].command = ["/bin/bash", "-c", "cd /app && PATH=/home/appuser/.local/bin:$PATH PYTHONPATH=/app python -m alembic -c alembic.ini upgrade head"] |
+            '.containerDefinitions[0].command = ["/bin/bash", "-c", "set -e; cd /app && PATH=/home/appuser/.local/bin:$PATH PYTHONPATH=/app python -m alembic -c alembic.ini upgrade head || (echo \"Migration failed\" && exit 1)"] |
             .containerDefinitions[0].entryPoint = [] |
+            .containerDefinitions[0].stopTimeout = 1800 |
+            .containerDefinitions[0].startTimeout = 600 |
+            .containerDefinitions[0].essential = true |
+            .taskRoleArn = .taskRoleArn |
+            .executionRoleArn = .executionRoleArn |
+            .cpu = "1024" |
+            .memory = "2048" |
             del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy) |
             .family = "migration"')
           
@@ -204,54 +211,144 @@ jobs:
           
           echo "Running migration task: $MIGRATION_TASK_ARN"
           
+          # Get network configuration
+          SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=tag:Tier,Values=app" --query 'Subnets[0].SubnetId' --output text)
+          SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)
+          
+          echo "Using subnet: $SUBNET_ID"
+          echo "Using security group: $SECURITY_GROUP_ID"
+          
           # Run migration task
-          TASK_ARN=$(aws ecs run-task \
+          TASK_RESPONSE=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
             --task-definition $MIGRATION_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Tier,Values=app" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SECURITY_GROUP_ID],assignPublicIp=DISABLED}" \
+            --output json)
           
-          echo "Migration task started: $TASK_ARN"
-          
-          # Wait for migration to complete
-          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
-          
-          # Check migration task exit code
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster $ECS_CLUSTER \
-            --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-          
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Migration failed with exit code: $EXIT_CODE"
-            
-            # Get more details about the failure
-            STOPPED_REASON=$(aws ecs describe-tasks \
-              --cluster $ECS_CLUSTER \
-              --tasks $TASK_ARN \
-              --query 'tasks[0].stoppedReason' \
-              --output text)
-            
-            echo "Stopped reason: $STOPPED_REASON"
-            
-            # Try to get logs from CloudWatch
-            LOG_GROUP="/aws/ecs/backend/backend-20250802155036857500000027"
-            LOG_STREAM="ecs/backend/$(echo $TASK_ARN | cut -d'/' -f3)"
-            echo "Checking logs in $LOG_GROUP/$LOG_STREAM"
-            
-            aws logs get-log-events \
-              --log-group-name "$LOG_GROUP" \
-              --log-stream-name "$LOG_STREAM" \
-              --query 'events[].message' \
-              --output text || echo "No logs available"
-            
+          # Check if task was created successfully
+          TASK_ARN=$(echo $TASK_RESPONSE | jq -r '.tasks[0].taskArn // empty')
+          if [ -z "$TASK_ARN" ]; then
+            echo "Failed to start migration task"
+            echo "Response: $TASK_RESPONSE"
             exit 1
           fi
           
-          echo "Database migration completed successfully"
+          echo "Migration task started: $TASK_ARN"
+          
+          # Custom wait loop with better timeout handling
+          echo "Waiting for migration task to complete..."
+          MAX_ATTEMPTS=180  # 30 minutes max (180 * 10 seconds)
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            TASK_STATUS=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $TASK_ARN \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+            
+            echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Task status is $TASK_STATUS"
+            
+            if [ "$TASK_STATUS" = "STOPPED" ]; then
+              echo "Task has stopped"
+              break
+            fi
+            
+            # Check if task is in a failed state
+            TASK_DETAILS=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $TASK_ARN \
+              --query 'tasks[0]' \
+              --output json)
+            
+            # Extract task health status if available
+            HEALTH_STATUS=$(echo $TASK_DETAILS | jq -r '.healthStatus // "UNKNOWN"')
+            if [ "$HEALTH_STATUS" = "UNHEALTHY" ]; then
+              echo "Task is unhealthy, checking logs..."
+              break
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 10
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "Migration task timed out after 30 minutes"
+            TASK_STATUS="TIMEOUT"
+          fi
+          
+          # Get final task details
+          TASK_DETAILS=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0]' \
+            --output json)
+          
+          # Check migration task exit code
+          EXIT_CODE=$(echo $TASK_DETAILS | jq -r '.containers[0].exitCode // "null"')
+          STOPPED_REASON=$(echo $TASK_DETAILS | jq -r '.stoppedReason // "Unknown"')
+          CONTAINER_REASON=$(echo $TASK_DETAILS | jq -r '.containers[0].reason // "Unknown"')
+          
+          echo "Task stopped with:"
+          echo "  Exit code: $EXIT_CODE"
+          echo "  Stopped reason: $STOPPED_REASON"
+          echo "  Container reason: $CONTAINER_REASON"
+          
+          # Get CloudWatch logs
+          echo "Fetching CloudWatch logs..."
+          
+          # Get the log group from the task definition
+          LOG_CONFIG=$(echo $LATEST_TASK_DEFINITION | jq -r '.containerDefinitions[0].logConfiguration')
+          LOG_GROUP=$(echo $LOG_CONFIG | jq -r '.options."awslogs-group" // "/aws/ecs/backend"')
+          LOG_STREAM_PREFIX=$(echo $LOG_CONFIG | jq -r '.options."awslogs-stream-prefix" // "ecs"')
+          
+          # Construct log stream name
+          TASK_ID=$(echo $TASK_ARN | cut -d'/' -f3)
+          LOG_STREAM="$LOG_STREAM_PREFIX/backend/$TASK_ID"
+          
+          echo "Looking for logs in: $LOG_GROUP/$LOG_STREAM"
+          
+          # Try to get logs with retries
+          for i in {1..5}; do
+            if aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$LOG_STREAM" \
+              --query 'events[].message' \
+              --output text 2>/dev/null; then
+              break
+            else
+              echo "Logs not available yet, retrying in 5 seconds... (attempt $i/5)"
+              sleep 5
+            fi
+          done
+          
+          # Also try to list available log streams if the exact stream wasn't found
+          if [ $? -ne 0 ]; then
+            echo "Could not find exact log stream, listing available streams:"
+            aws logs describe-log-streams \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name-prefix "$LOG_STREAM_PREFIX/backend" \
+              --order-by LastEventTime \
+              --descending \
+              --max-items 5 \
+              --query 'logStreams[].logStreamName' \
+              --output text || echo "Could not list log streams"
+          fi
+          
+          # Check if migration succeeded
+          if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "null" ]; then
+            echo "❌ Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          elif [ "$TASK_STATUS" = "TIMEOUT" ]; then
+            echo "❌ Migration timed out"
+            exit 1
+          elif [ "$TASK_STATUS" != "STOPPED" ]; then
+            echo "❌ Migration task in unexpected state: $TASK_STATUS"
+            exit 1
+          else
+            echo "✅ Database migration completed successfully"
+          fi
 
       - name: Wait for deployment to complete
         run: |
