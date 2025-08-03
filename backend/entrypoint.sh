@@ -35,7 +35,24 @@ fi
 if [ "$RUN_MIGRATIONS" = "true" ]; then
     echo -e "${YELLOW}🔄 Running database migrations...${NC}"
     cd /app
-    python -m alembic upgrade head
+    
+    # Verify alembic.ini exists
+    if [ ! -f "alembic.ini" ]; then
+        echo -e "${RED}❌ alembic.ini not found in /app${NC}"
+        exit 1
+    fi
+    
+    # Verify alembic directory exists
+    if [ ! -d "alembic" ]; then
+        echo -e "${RED}❌ alembic directory not found in /app${NC}"
+        exit 1
+    fi
+    
+    echo -e "${YELLOW}📁 Current directory: $(pwd)${NC}"
+    echo -e "${YELLOW}📄 Files: $(ls -la)${NC}"
+    
+    # Run migrations with explicit configuration file
+    python -m alembic -c alembic.ini upgrade head
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Database migrations completed successfully${NC}"
         exit 0

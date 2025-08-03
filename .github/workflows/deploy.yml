@@ -46,9 +46,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
         run: |
-          echo "Building backend image..."
-          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG backend/
-          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest backend/
+          echo "Building backend image for linux/amd64..."
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG backend/
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest backend/
           
           echo "Pushing backend image to ECR..."
           docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
@@ -59,12 +59,12 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
         run: |
-          echo "Building frontend image..."
-          docker build \
+          echo "Building frontend image for linux/amd64..."
+          docker build --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" \
             --build-arg NEXT_PUBLIC_API_BASE_URL="${{ secrets.NEXT_PUBLIC_API_BASE_URL }}" \
             -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG frontend/
-          docker build \
+          docker build --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}" \
             --build-arg NEXT_PUBLIC_API_BASE_URL="${{ secrets.NEXT_PUBLIC_API_BASE_URL }}" \
             -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest frontend/
@@ -177,25 +177,39 @@ jobs:
           fi
 
       - name: Run database migrations
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.get-sha.outputs.sha_short }}
         run: |
           echo "Running database migrations..."
           
           # Get the latest backend task definition (the one we just deployed)
           LATEST_TASK_DEFINITION=$(aws ecs describe-task-definition \
             --task-definition $ECS_BACKEND_SERVICE \
-            --include TAGS \
+            --query 'taskDefinition' \
+            --output json)
+          
+          # Create a migration-specific task definition with direct command
+          MIGRATION_TASK_DEF=$(echo $LATEST_TASK_DEFINITION | jq \
+            '.containerDefinitions[0].command = ["/bin/bash", "-c", "cd /app && PATH=/home/appuser/.local/bin:$PATH PYTHONPATH=/app python -m alembic -c alembic.ini upgrade head"] |
+            .containerDefinitions[0].entryPoint = [] |
+            del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | del(.placementConstraints) | del(.compatibilities) | del(.registeredAt) | del(.registeredBy) |
+            .family = "migration"')
+          
+          echo "Registering migration task definition..."
+          MIGRATION_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$MIGRATION_TASK_DEF" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
-          echo "Using task definition: $LATEST_TASK_DEFINITION"
+          echo "Running migration task: $MIGRATION_TASK_ARN"
           
-          # Run migration task using environment variable approach
+          # Run migration task
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
-            --task-definition $LATEST_TASK_DEFINITION \
+            --task-definition $MIGRATION_TASK_ARN \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Tier,Values=app" --query 'Subnets[0].SubnetId' --output text)],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=checkguard-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=DISABLED}" \
-            --overrides '{"containerOverrides":[{"name":"backend","environment":[{"name":"RUN_MIGRATIONS","value":"true"},{"name":"INIT_DB","value":"false"}]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)
           
