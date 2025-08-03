@@ -189,12 +189,13 @@ jobs:
             --query 'taskDefinition' \
             --output json)
           
-          # Create a migration-specific task definition with direct command
+          # Create a migration-specific task definition with direct command and all secrets
           MIGRATION_TASK_DEF=$(echo $LATEST_TASK_DEFINITION | jq \
             '.containerDefinitions[0].command = ["python", "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"] |
             .containerDefinitions[0].stopTimeout = 120 |
             .containerDefinitions[0].startTimeout = 600 |
             .containerDefinitions[0].essential = true |
+            .containerDefinitions[0].workingDirectory = "/app" |
             .taskRoleArn = .taskRoleArn |
             .executionRoleArn = .executionRoleArn |
             .cpu = "1024" |
