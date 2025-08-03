@@ -378,7 +378,7 @@ jobs:
           echo "ALB DNS: $ALB_DNS"
           
           # Health check with retry logic
-          for i in {1..30}; do
+          for i in {1..10}; do
             echo "Health check attempt $i..."
             if curl -f -s http://$ALB_DNS/health > /dev/null; then
               echo "✅ Application health check passed!"
