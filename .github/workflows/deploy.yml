@@ -189,6 +189,7 @@ jobs:
           # Create a one-time migration task with correct IAM roles
           MIGRATION_TASK_DEF=$(echo $TASK_DEFINITION | jq \
             '.containerDefinitions[0].command = ["python", "-m", "alembic", "upgrade", "head"] |
+             .containerDefinitions[0].entryPoint = [] |
              .taskRoleArn = "arn:aws:iam::233442448767:role/checkguard-ecs-task-role" |
              .executionRoleArn = "arn:aws:iam::233442448767:role/checkguard-ecs-task-execution-role" |
              del(.taskDefinitionArn) | del(.revision) | del(.status) | del(.requiresAttributes) | 
