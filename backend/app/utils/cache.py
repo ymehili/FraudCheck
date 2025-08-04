@@ -23,7 +23,11 @@ class DistributedCache:
     async def _get_redis(self):
         """Get Redis client instance."""
         if self._redis is None:
-            self._redis = await RedisConnection.get_redis_client()
+            try:
+                self._redis = await RedisConnection.get_redis_client()
+            except Exception as e:
+                logger.warning(f"Redis unavailable for caching: {e}")
+                return None
         return self._redis
     
     def _generate_key(self, *args, **kwargs) -> str:
@@ -39,6 +43,8 @@ class DistributedCache:
         """Get value from distributed cache."""
         try:
             redis_client = await self._get_redis()
+            if redis_client is None:
+                return None
             value = await redis_client.get(key)
             if value is None:
                 return None
@@ -51,6 +57,8 @@ class DistributedCache:
         """Set value in distributed cache with TTL."""
         try:
             redis_client = await self._get_redis()
+            if redis_client is None:
+                return
             serialized_value = serialize_value(value)
             await redis_client.setex(key, ttl_seconds, serialized_value)
         except Exception as e:
@@ -60,6 +68,8 @@ class DistributedCache:
         """Delete key from distributed cache."""
         try:
             redis_client = await self._get_redis()
+            if redis_client is None:
+                return
             await redis_client.delete(key)
         except Exception as e:
             logger.error(f"Cache delete error for key {key}: {e}")
@@ -68,6 +78,8 @@ class DistributedCache:
         """Clear all cache entries."""
         try:
             redis_client = await self._get_redis()
+            if redis_client is None:
+                return
             await redis_client.flushdb()
         except Exception as e:
             logger.error(f"Cache clear error: {e}")

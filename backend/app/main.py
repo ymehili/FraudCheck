@@ -22,10 +22,14 @@ async def lifespan(app: FastAPI):
         app.state.executor_manager = executor_manager
         logger.info("ProcessPoolExecutor initialized successfully")
         
-        # Initialize Redis connection pool
+        # Initialize Redis connection pool (non-blocking)
         logger.info("Initializing Redis connection pool...")
-        await RedisConnection.get_redis_client()
-        logger.info("Redis connection pool initialized successfully")
+        try:
+            await RedisConnection.get_redis_client()
+            logger.info("Redis connection pool initialized successfully")
+        except Exception as redis_error:
+            logger.warning(f"Redis connection failed during startup: {redis_error}")
+            logger.warning("Application will continue without Redis caching")
         
         # Start cache cleanup task (no-op for Redis but maintains compatibility)
         await start_cache_cleanup_task()

@@ -18,7 +18,7 @@ class RedisConnection:
     _client: Optional[redis.Redis] = None
     
     @classmethod
-    async def get_redis_client(cls) -> redis.Redis:
+    async def get_redis_client(cls) -> Optional[redis.Redis]:
         """Get Redis client with connection pooling."""
         if cls._client is None:
             try:
@@ -27,16 +27,19 @@ class RedisConnection:
                     redis_url,
                     max_connections=20,
                     retry_on_timeout=True,
-                    decode_responses=False  # We'll handle JSON serialization manually
+                    decode_responses=False,  # We'll handle JSON serialization manually
+                    socket_connect_timeout=5,  # 5 second connection timeout
+                    socket_timeout=5  # 5 second socket timeout
                 )
                 cls._client = redis.Redis(connection_pool=cls._pool)
                 
-                # Test the connection
+                # Test the connection with timeout
                 await cls._client.ping()
                 logger.info(f"Redis connection established: {redis_url}")
                 
             except Exception as e:
                 logger.error(f"Failed to connect to Redis: {e}")
+                cls._client = None  # Ensure client is None on failure
                 raise
                 
         return cls._client
