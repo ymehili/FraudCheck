@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const { getToken } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     dateRange: { start: '', end: '' },
@@ -38,7 +39,9 @@ export default function DashboardPage() {
 
   const fetchDashboardStats = useCallback(async () => {
     try {
-      setIsLoading(true);
+      const showSkeleton = stats === null;
+      if (showSkeleton) setIsLoading(true);
+      setIsRefreshing(true);
       setError(null);
 
       const token = await getToken();
@@ -53,22 +56,25 @@ export default function DashboardPage() {
       setError(error instanceof Error ? error.message : 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [getToken]);
+  }, [getToken, stats]);
 
   useEffect(() => {
     fetchDashboardStats();
   }, [fetchDashboardStats]);
 
-  const handleFiltersChange = (newFilters: FilterState) => {
+  const handleFiltersChange = useCallback((newFilters: FilterState) => {
     setFilters(newFilters);
-    // Dashboard stats endpoint currently returns global stats; refresh to keep UX responsive.
-    fetchDashboardStats();
-  };
+    // NOTE: Dashboard stats currently return global stats; avoid refetching on every
+    // debounced filter update to prevent UI flicker.
+  }, []);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     fetchDashboardStats();
-  };
+  }, [fetchDashboardStats]);
+
+  const showSkeleton = isLoading && stats === null;
 
   if (error) {
     return (
@@ -129,7 +135,7 @@ export default function DashboardPage() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-2">
                   <Skeleton className="h-8 w-16" />
                   <Skeleton className="h-4 w-20" />
@@ -166,7 +172,7 @@ export default function DashboardPage() {
               <AlertTriangle className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-2">
                   <Skeleton className="h-8 w-16" />
                   <Skeleton className="h-4 w-20" />
@@ -193,7 +199,7 @@ export default function DashboardPage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-2">
                   <Skeleton className="h-8 w-16" />
                   <Skeleton className="h-4 w-20" />
@@ -218,7 +224,7 @@ export default function DashboardPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-2">
                   <Skeleton className="h-8 w-16" />
                   <Skeleton className="h-4 w-20" />
@@ -248,7 +254,7 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-4">
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-full" />
@@ -272,7 +278,7 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {showSkeleton ? (
                 <div className="space-y-4">
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className="flex items-center space-x-3">
@@ -350,9 +356,10 @@ export default function DashboardPage() {
                 className="w-full justify-start" 
                 variant="outline"
                 onClick={handleRefresh}
+                disabled={isRefreshing}
               >
                 <TrendingUp className="h-4 w-4 mr-2" />
-                Refresh Data
+                {isRefreshing ? "Refreshing…" : "Refresh Data"}
               </Button>
             </div>
           </CardContent>
