@@ -90,6 +90,17 @@ def cached(ttl_seconds: int = 300):
             
             # Try to get from cache
             cached_result = await _cache_instance.get(cache_key)
+            # Backward compatibility: older cache entries may have stored Pydantic
+            # models as their string repr ("field=value ..."), which breaks FastAPI
+            # response validation. Treat those as cache misses and overwrite.
+            if isinstance(cached_result, str):
+                logger.warning(
+                    f"Invalid cached value type for {func.__name__} (str). "
+                    "Deleting and recomputing."
+                )
+                await _cache_instance.delete(cache_key)
+                cached_result = None
+
             if cached_result is not None:
                 logger.debug(f"Cache hit for {func.__name__}")
                 return cached_result

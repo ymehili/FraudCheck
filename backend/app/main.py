@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CheckGuard AI API",
+    title="FraudCheck AI API",
     description="AI-powered check fraud detection system",
     version="1.0.0",
     lifespan=lifespan,
@@ -74,7 +74,7 @@ app.include_router(api.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
-    return {"message": "CheckGuard AI API is running"}
+    return {"message": "FraudCheck AI API is running"}
 
 @app.get("/health")
 async def health_check():

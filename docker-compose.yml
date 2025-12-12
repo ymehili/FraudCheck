@@ -2,11 +2,11 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: checkguard-postgres
+    container_name: FraudCheck-postgres
     environment:
-      POSTGRES_DB: checkguard
-      POSTGRES_USER: checkguard
-      POSTGRES_PASSWORD: checkguard
+      POSTGRES_DB: FraudCheck
+      POSTGRES_USER: FraudCheck
+      POSTGRES_PASSWORD: FraudCheck
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
@@ -14,18 +14,18 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U checkguard -d checkguard"]
+      test: ["CMD-SHELL", "pg_isready -U FraudCheck -d FraudCheck"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: checkguard-redis
+    container_name: FraudCheck-redis
     ports:
       - "6379:6379"
     volumes:
@@ -37,12 +37,12 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # LocalStack for local AWS services
   localstack:
     image: localstack/localstack:latest
-    container_name: checkguard-localstack
+    container_name: FraudCheck-localstack
     ports:
       - "4566:4566"
     environment:
@@ -60,13 +60,13 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # ClamAV Daemon for malware scanning
   clamav:
     image: clamav/clamav:stable
     platform: linux/amd64
-    container_name: checkguard-clamav
+    container_name: FraudCheck-clamav
     mem_limit: 4g
     mem_reservation: 3g
     environment:
@@ -90,20 +90,21 @@ services:
       start_period: 3m
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: checkguard-backend
+    container_name: FraudCheck-backend
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://checkguard:checkguard@postgres:5432/checkguard
+      - DATABASE_URL=postgresql+asyncpg://FraudCheck:FraudCheck@postgres:5432/FraudCheck
       - AWS_ENDPOINT_URL=http://localstack:4566
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - INIT_DB=true
       - CLAMAV_SOCKET_PATH=/tmp/clamd.sock
     env_file:
@@ -123,17 +124,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Celery Worker
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: checkguard-celery-worker
+    container_name: FraudCheck-celery-worker
     command: python celery_worker.py
     environment:
-      - DATABASE_URL=postgresql+asyncpg://checkguard:checkguard@postgres:5432/checkguard
+      - DATABASE_URL=postgresql+asyncpg://FraudCheck:FraudCheck@postgres:5432/FraudCheck
       - AWS_ENDPOINT_URL=http://localstack:4566
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -157,18 +158,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Flower Monitoring (Optional)
   flower:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: checkguard-flower
-    command: celery -A app.tasks.celery_app flower --port=5555 --broker=redis://redis:6379/0 --basic_auth=admin:admin
+    container_name: FraudCheck-flower
+    # Celery CLI parses broker options as "celery [celery args] flower [flower args]".
+    # Passing --broker after "flower" causes the warning seen in logs.
+    command: celery -A app.tasks.celery_app --broker=redis://redis:6379/0 flower --port=5555 --basic_auth=admin:admin
     ports:
       - "5555:5555"
     environment:
+      - DATABASE_URL=postgresql+asyncpg://FraudCheck:FraudCheck@postgres:5432/FraudCheck
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
     env_file:
@@ -178,22 +182,22 @@ services:
       - celery-worker
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Frontend Application
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: checkguard-frontend
+    container_name: FraudCheck-frontend
     ports:
       - "3000:3000"
+    env_file:
+      - .env.development
     environment:
       - API_BASE_URL=http://backend:8000
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_YmlnLWZseS0xNi5jbGVyay5hY2NvdW50cy5kZXYk
-      - CLERK_SECRET_KEY=REDACTED_CLERK_KEY_1
       - NODE_ENV=development
     volumes:
       - ./frontend:/app
@@ -203,14 +207,14 @@ services:
       - backend
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
   # Optional: pgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: checkguard-pgadmin
+    container_name: FraudCheck-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@checkguard.com
+      PGADMIN_DEFAULT_EMAIL: admin@FraudCheck.com
       PGADMIN_DEFAULT_PASSWORD: admin
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
@@ -221,7 +225,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     restart: unless-stopped
     networks:
-      - checkguard-network
+      - FraudCheck-network
 
 volumes:
   postgres_data:
@@ -240,5 +244,5 @@ volumes:
     driver: local
 
 networks:
-  checkguard-network:
+  FraudCheck-network:
     driver: bridge

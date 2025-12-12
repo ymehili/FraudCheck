@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-S3 Bucket Initialization Script for CheckGuard
+S3 Bucket Initialization Script for FraudCheck
 This script creates the necessary S3 bucket in LocalStack for development
 """
 
@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 
 def main():
     # Configuration
-    bucket_name = os.getenv('S3_BUCKET_NAME', 'checkguard-ai-bucket')
+    bucket_name = os.getenv('S3_BUCKET_NAME', 'FraudCheck-ai-bucket')
     aws_endpoint_url = os.getenv('AWS_ENDPOINT_URL', 'http://localstack:4566')
     aws_region = os.getenv('AWS_REGION', 'us-east-2')
     

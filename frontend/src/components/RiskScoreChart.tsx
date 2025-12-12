@@ -23,7 +23,6 @@ export function RiskScoreChart({
   className,
   title = "Risk Score Distribution",
   showDetails = true,
-  showLegend = false
 }: RiskScoreChartProps) {
   const chartData = useMemo(() => {
     // Use data prop first, then riskDistribution
@@ -109,11 +108,11 @@ export function RiskScoreChart({
               <div key={index} className="space-y-1">
                 <div className="flex justify-between items-center text-sm">
                   <span className="font-medium">{label}</span>
-                  <span className="text-gray-600">
+                  <span className="text-muted-foreground">
                     {value} ({Math.round(percentage)}%)
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
                   <div
                     className={cn('h-full transition-all duration-500 ease-out', 
                       'color' in item ? item.color : 'bg-blue-500')}
@@ -129,16 +128,16 @@ export function RiskScoreChart({
         {showDetails && (
           <div className="grid grid-cols-2 gap-4 pt-4 border-t">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-foreground">
                 {formatNumber(total)}
               </div>
-              <div className="text-sm text-gray-600">Total Analyses</div>
+              <div className="text-sm text-muted-foreground">Total Analyses</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-foreground">
                 {Math.round(averageRiskScore)}
               </div>
-              <div className="text-sm text-gray-600">Average Score</div>
+              <div className="text-sm text-muted-foreground">Average Score</div>
             </div>
           </div>
         )}
@@ -183,7 +182,7 @@ export function RiskScoreDonut({
   if (total === 0) {
     return (
       <div className={cn('flex items-center justify-center', className)} style={{ height: size, width: size }}>
-        <div className="text-center text-gray-500">
+        <div className="text-center text-muted-foreground">
           <div className="text-sm">No data</div>
         </div>
       </div>
@@ -286,7 +285,7 @@ export function RiskScoreDonut({
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
           <div className="text-lg font-bold">{Math.round(averageRiskScore)}</div>
-          <div className="text-xs text-gray-600">Avg Risk</div>
+          <div className="text-xs text-muted-foreground">Avg Risk</div>
         </div>
       </div>
     </div>

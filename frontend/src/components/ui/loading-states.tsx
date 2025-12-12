@@ -41,12 +41,6 @@ export function LoadingState({
     lg: 'py-24'
   };
 
-  const iconSizes = {
-    sm: 'h-6 w-6',
-    md: 'h-12 w-12',
-    lg: 'h-16 w-16'
-  };
-
   return (
     <div className={cn('text-center', sizeClasses[size], className)}>
       <div className="mx-auto mb-4 flex items-center justify-center">

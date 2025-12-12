@@ -64,6 +64,10 @@ class RedisConnection:
 def serialize_value(value: Any) -> str:
     """Serialize value to JSON string for Redis storage."""
     try:
+        # Pydantic v2 models: store as JSON-friendly dict so cache hits return
+        # structured data (not "field=value ..." string representations).
+        if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
+            return json.dumps(value.model_dump(mode="json"))
         return json.dumps(value, default=str)
     except (TypeError, ValueError) as e:
         logger.error(f"Failed to serialize value {type(value)}: {e}")

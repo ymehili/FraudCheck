@@ -33,21 +33,22 @@ export function NavigationBar() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="sticky top-0 z-50">
+      <div className="glass border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Logo and brand */}
           <div className="flex">
             <Link href={user ? ROUTES.DASHBOARD : ROUTES.HOME} className="flex-shrink-0 flex items-center">
               <Shield className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900">
-                CheckGuard AI
+              <span className="ml-2 text-xl font-semibold tracking-tight text-foreground">
+                FraudCheck AI
               </span>
             </Link>
             
             {/* Desktop navigation */}
             {user && (
-              <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
+              <div className="hidden sm:ml-8 sm:flex sm:items-center sm:space-x-1">
                 {navigation.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || 
@@ -58,10 +59,10 @@ export function NavigationBar() {
                       key={item.name}
                       href={item.href}
                       className={cn(
-                        'inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors',
+                        'inline-flex items-center rounded-full px-3 py-2 text-sm font-medium transition-colors',
                         isActive
-                          ? 'border-blue-500 text-gray-900'
-                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                          ? 'bg-primary/10 text-foreground'
+                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                       )}
                     >
                       <Icon className="h-4 w-4 mr-2" />
@@ -79,7 +80,7 @@ export function NavigationBar() {
               <>
                 {/* User button for authenticated users */}
                 <div className="flex items-center space-x-4">
-                  <span className="hidden sm:block text-sm text-gray-700">
+                  <span className="hidden sm:block text-sm text-muted-foreground">
                     {user.emailAddresses[0]?.emailAddress}
                   </span>
                   <UserButton 
@@ -117,16 +118,17 @@ export function NavigationBar() {
               </div>
             ) : (
               /* Loading state */
-              <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+              <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
             )}
           </div>
         </div>
       </div>
+      </div>
 
       {/* Mobile menu */}
       {mobileMenuOpen && user && (
-        <div className="sm:hidden">
-          <div className="pt-2 pb-3 space-y-1">
+        <div className="sm:hidden glass border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-3 space-y-1">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || 
@@ -140,8 +142,8 @@ export function NavigationBar() {
                   className={cn(
                     'flex items-center pl-3 pr-4 py-2 text-base font-medium transition-colors',
                     isActive
-                      ? 'bg-blue-50 border-r-4 border-blue-500 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-primary/10 text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                   )}
                 >
                   <Icon className="h-5 w-5 mr-3" />
@@ -152,14 +154,14 @@ export function NavigationBar() {
           </div>
           
           {/* Mobile user info */}
-          <div className="pt-4 pb-3 border-t border-gray-200">
+          <div className="pt-4 pb-3 border-t border-border/70">
             <div className="flex items-center px-4">
-              <div className="text-base font-medium text-gray-800">
+              <div className="text-base font-medium text-foreground">
                 {user.firstName} {user.lastName}
               </div>
             </div>
             <div className="px-4">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 {user.emailAddresses[0]?.emailAddress}
               </div>
             </div>

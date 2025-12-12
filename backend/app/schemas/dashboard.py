@@ -1,5 +1,5 @@
 """
-Dashboard API schemas for CheckGuard AI.
+Dashboard API schemas for FraudCheck AI.
 
 This module defines Pydantic schemas for dashboard-related API endpoints,
 including dashboard statistics, analysis history, filtering, and pagination.

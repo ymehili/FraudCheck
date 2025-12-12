@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     
     # API Settings
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "CheckGuard AI"
+    PROJECT_NAME: str = "FraudCheck AI"
     
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://your-production-domain.com"]
@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     MAX_IMAGE_DIMENSIONS: int = 50000       # Maximum width/height in pixels
     
     # Additional properties for test compatibility
-    project_name: str = "CheckGuard AI"
+    project_name: str = "FraudCheck AI"
     debug: bool = False
     
     model_config = ConfigDict(env_file=".env", extra="ignore")

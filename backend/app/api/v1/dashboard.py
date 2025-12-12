@@ -1,5 +1,5 @@
 """
-Dashboard API endpoints for CheckGuard AI.
+Dashboard API endpoints for FraudCheck AI.
 
 This module provides comprehensive dashboard functionality including:
 - Dashboard statistics and overview

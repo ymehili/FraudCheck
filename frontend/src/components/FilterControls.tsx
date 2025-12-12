@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Calendar, Filter, X, Search } from 'lucide-react';
+import { Filter, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,15 +25,14 @@ export interface FilterState {
 }
 
 interface FilterControlsProps {
-  filters?: Record<string, unknown>;
-  onFiltersChange: (filters: Record<string, unknown>) => void;
+  filters?: Partial<FilterState>;
+  onFiltersChange: (filters: FilterState) => void;
   className?: string;
   showSearch?: boolean;
-  showStatusFilter?: boolean;
   showStatus?: boolean;
   showRiskRange?: boolean;
   showDateRange?: boolean;
-  initialFilters?: Record<string, unknown>;
+  initialFilters?: Partial<FilterState>;
   isLoading?: boolean;
 }
 
@@ -56,19 +55,35 @@ export function FilterControls({
   className,
   showSearch = true,
   showStatus = true,
-  showStatusFilter = false,
   showRiskRange = true,
   showDateRange = true,
   initialFilters = {},
-  isLoading = false,
 }: FilterControlsProps) {
-  const [filters, setFilters] = useState<Record<string, unknown>>({
+  const [filters, setFilters] = useState<FilterState>(() => ({
     ...defaultFilters,
     ...initialFilters,
-    ...externalFilters,
-  });
+    dateRange: {
+      ...defaultFilters.dateRange,
+      ...(initialFilters.dateRange ?? {}),
+      ...(externalFilters?.dateRange ?? {}),
+    },
+    riskScore: {
+      ...defaultFilters.riskScore,
+      ...(initialFilters.riskScore ?? {}),
+      ...(externalFilters?.riskScore ?? {}),
+    },
+    status: (externalFilters?.status ?? initialFilters.status ?? defaultFilters.status) as string,
+    search: (externalFilters?.search ?? initialFilters.search ?? defaultFilters.search) as string,
+  }));
   const [isExpanded, setIsExpanded] = useState(false);
   const isInitialMount = useRef(true);
+  const onFiltersChangeRef = useRef(onFiltersChange);
+
+  // Keep latest callback without re-triggering the debounce effect when the parent
+  // recreates the function each render.
+  useEffect(() => {
+    onFiltersChangeRef.current = onFiltersChange;
+  }, [onFiltersChange]);
 
   // Debounced filter changes
   useEffect(() => {
@@ -79,14 +94,14 @@ export function FilterControls({
     }
     
     const timeoutId = setTimeout(() => {
-      onFiltersChange(filters);
+      onFiltersChangeRef.current(filters);
     }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [filters]);
 
-  const updateFilter = useCallback((key: string, value: unknown) => {
-    setFilters((prev: Record<string, unknown>) => ({ ...prev, [key]: value }));
+  const updateFilter = useCallback(<K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const resetFilters = useCallback(() => {
@@ -177,7 +192,7 @@ export function FilterControls({
           <div className="space-y-2">
             <Label>Search</Label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
               <Input
                 placeholder="Search by filename, analysis ID, or content..."
                 value={filters.search}
@@ -331,7 +346,7 @@ export function FilterControls({
         {/* Active Filters Summary */}
         {hasActiveFilters() && (
           <div className="pt-2 border-t">
-            <div className="text-sm text-gray-600 mb-2">Active filters:</div>
+            <div className="text-sm text-muted-foreground mb-2">Active filters:</div>
             <div className="flex flex-wrap gap-1">
               {filters.search && (
                 <Badge variant="outline" className="text-xs">

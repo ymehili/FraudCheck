@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
-import { NavigationBar } from '@/components/NavigationBar';
 import { PDFGenerator } from '@/components/PDFGenerator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +30,7 @@ import { AnalysisResponse } from '@/types/api';
 import { formatDate, getRiskLevel, getRiskColor, cn, formatRiskScore, formatConfidence, formatScore } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import Link from 'next/link';
+import { AppShell } from '@/components/AppShell';
 
 export default function AnalysisResultPage() {
   const params = useParams();
@@ -42,7 +42,7 @@ export default function AnalysisResultPage() {
 
   const analysisId = params.id as string;
 
-  const fetchAnalysisResult = async () => {
+  const fetchAnalysisResult = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -60,24 +60,17 @@ export default function AnalysisResultPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [analysisId, getToken]);
 
   useEffect(() => {
     if (analysisId) {
       fetchAnalysisResult();
     }
-  }, [analysisId]);
-
-  const handleDownloadReport = async () => {
-    // PDF generation is now handled by the PDFGenerator component
-    console.log('Download report for analysis:', analysisId);
-  };
+  }, [analysisId, fetchAnalysisResult]);
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <NavigationBar />
-        <div className="max-w-7xl mx-auto px-4 py-12">
+      <AppShell>
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -94,16 +87,12 @@ export default function AnalysisResultPage() {
               </div>
             </AlertDescription>
           </Alert>
-        </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavigationBar />
-      
-      <div className="max-w-7xl mx-auto px-4 py-12">
+    <AppShell>
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-4">
@@ -116,13 +105,13 @@ export default function AnalysisResultPage() {
               Back
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                 Analysis Results
               </h1>
               {isLoading ? (
                 <Skeleton className="h-6 w-40 mt-1" />
               ) : analysis ? (
-                <p className="text-lg text-gray-600">
+                <p className="text-lg text-muted-foreground">
                   Analysis ID: #{analysisId.slice(-8)} • {formatDate(analysis.timestamp)}
                 </p>
               ) : null}
@@ -205,10 +194,10 @@ export default function AnalysisResultPage() {
                   )}>
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
+                        <h3 className="text-lg font-semibold text-foreground">
                           Risk Level: {getRiskLevel(analysis.overall_risk_score)}
                         </h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           Based on comprehensive fraud detection analysis
                         </p>
                       </div>
@@ -225,7 +214,7 @@ export default function AnalysisResultPage() {
                   {/* Key Findings */}
                   {analysis.rules?.violations && analysis.rules.violations.length > 0 && (
                     <div className="mt-6">
-                      <h4 className="font-medium text-gray-900 mb-3">Key Findings:</h4>
+                      <h4 className="font-medium text-foreground mb-3">Key Findings:</h4>
                       <div className="space-y-2">
                         {analysis.rules.violations.slice(0, 3).map((violation, index) => (
                           <div key={index} className="flex items-center space-x-2 text-sm">
@@ -254,7 +243,7 @@ export default function AnalysisResultPage() {
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Forensics Scores</h4>
+                        <h4 className="font-medium text-foreground mb-2">Forensics Scores</h4>
                         <div className="space-y-1 text-sm">
                           <div className="flex justify-between">
                             <span>Edge Score:</span>
@@ -272,7 +261,7 @@ export default function AnalysisResultPage() {
                       </div>
 
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Detected Anomalies</h4>
+                        <h4 className="font-medium text-foreground mb-2">Detected Anomalies</h4>
                         <div className="space-y-1 text-sm">
                           {analysis.forensics.detected_anomalies.length > 0 ? (
                             analysis.forensics.detected_anomalies.map((anomaly, index) => (
@@ -292,12 +281,12 @@ export default function AnalysisResultPage() {
                     </div>
 
                     <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Overall Forensics Score</h4>
+                      <h4 className="font-medium text-foreground mb-2">Overall Forensics Score</h4>
                       <Progress 
                         value={analysis.forensics.overall_score * 100} 
                         className="h-2"
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {formatRiskScore(analysis.forensics.overall_score)}
                       </p>
                     </div>
@@ -321,66 +310,66 @@ export default function AnalysisResultPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-4">
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <User className="h-4 w-4 mr-1" />
                             Payee
                           </label>
-                          <p className="text-gray-900">{analysis.ocr.payee || 'Not detected'}</p>
+                          <p className="text-foreground">{analysis.ocr.payee || 'Not detected'}</p>
                         </div>
 
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
                             Amount
                           </label>
-                          <p className="text-gray-900">
+                          <p className="text-foreground">
                             {analysis.ocr.amount || 'Not detected'}
                           </p>
                         </div>
 
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <Calendar className="h-4 w-4 mr-1" />
                             Date
                           </label>
-                          <p className="text-gray-900">{analysis.ocr.date || 'Not detected'}</p>
+                          <p className="text-foreground">{analysis.ocr.date || 'Not detected'}</p>
                         </div>
                       </div>
 
                       <div className="space-y-4">
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <Hash className="h-4 w-4 mr-1" />
                             Check Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr.check_number || 'Not detected'}</p>
+                          <p className="text-foreground font-mono">{analysis.ocr.check_number || 'Not detected'}</p>
                         </div>
 
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <Hash className="h-4 w-4 mr-1" />
                             Account Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr.account_number || 'Not detected'}</p>
+                          <p className="text-foreground font-mono">{analysis.ocr.account_number || 'Not detected'}</p>
                         </div>
 
                         <div>
-                          <label className="text-sm font-medium text-gray-500 flex items-center">
+                          <label className="text-sm font-medium text-muted-foreground flex items-center">
                             <Hash className="h-4 w-4 mr-1" />
                             Routing Number
                           </label>
-                          <p className="text-gray-900 font-mono">{analysis.ocr.routing_number || 'Not detected'}</p>
+                          <p className="text-foreground font-mono">{analysis.ocr.routing_number || 'Not detected'}</p>
                         </div>
                       </div>
                     </div>
 
                     {analysis.ocr.field_confidences && (
                       <div className="mt-6">
-                        <h4 className="font-medium text-gray-900 mb-3">OCR Field Confidence</h4>
+                        <h4 className="font-medium text-foreground mb-3">OCR Field Confidence</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           {Object.entries(analysis.ocr.field_confidences).map(([field, score]) => (
                             <div key={field} className="text-center">
-                              <div className="text-sm font-medium text-gray-500 capitalize">
+                              <div className="text-sm font-medium text-muted-foreground capitalize">
                                 {field.replace('_', ' ')}
                               </div>
                               <div className="text-lg font-bold">
@@ -424,8 +413,8 @@ export default function AnalysisResultPage() {
                     ) : (
                       <div className="text-center py-8">
                         <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                        <p className="text-lg font-medium text-gray-900">No Rule Violations</p>
-                        <p className="text-gray-500">All fraud detection checks passed successfully</p>
+                        <p className="text-lg font-medium text-foreground">No Rule Violations</p>
+                        <p className="text-muted-foreground">All fraud detection checks passed successfully</p>
                       </div>
                     )}
 
@@ -433,22 +422,22 @@ export default function AnalysisResultPage() {
                       <div className="mt-6 pt-4 border-t border-gray-200">
                         <div className="grid grid-cols-3 gap-4 text-center">
                           <div>
-                            <div className="text-2xl font-bold text-gray-900">
+                            <div className="text-2xl font-bold text-foreground">
                               {(analysis.rules.violations?.length || 0) + (analysis.rules.passed_rules?.length || 0)}
                             </div>
-                            <div className="text-sm text-gray-500">Total Rules</div>
+                            <div className="text-sm text-muted-foreground">Total Rules</div>
                           </div>
                           <div>
                             <div className="text-2xl font-bold text-red-600">
                               {analysis.rules.violations?.length || 0}
                             </div>
-                            <div className="text-sm text-gray-500">Violations</div>
+                            <div className="text-sm text-muted-foreground">Violations</div>
                           </div>
                           <div>
                             <div className="text-2xl font-bold text-green-600">
                               {analysis.rules.passed_rules?.length || 0}
                             </div>
-                            <div className="text-sm text-gray-500">Passed</div>
+                            <div className="text-sm text-muted-foreground">Passed</div>
                           </div>
                         </div>
                       </div>
@@ -489,7 +478,7 @@ export default function AnalysisResultPage() {
                   >
                     {getRiskLevel(analysis.overall_risk_score)}
                   </Badge>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     Out of 100 possible points
                   </p>
                 </CardContent>
@@ -502,30 +491,30 @@ export default function AnalysisResultPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center text-sm">
-                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className="text-gray-600">Created:</span>
+                    <Calendar className="h-4 w-4 mr-2 text-muted-foreground/70" />
+                    <span className="text-muted-foreground">Created:</span>
                     <span className="ml-auto">{formatDate(analysis.timestamp)}</span>
                   </div>
                   
                   <div className="flex items-center text-sm">
-                    <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className="text-gray-600">Processing Time:</span>
+                    <Clock className="h-4 w-4 mr-2 text-muted-foreground/70" />
+                    <span className="text-muted-foreground">Processing Time:</span>
                     <span className="ml-auto">
                       {analysis.processing_time ? `${analysis.processing_time.toFixed(1)}s` : 'N/A'}
                     </span>
                   </div>
 
                   <div className="flex items-center text-sm">
-                    <FileText className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className="text-gray-600">File ID:</span>
+                    <FileText className="h-4 w-4 mr-2 text-muted-foreground/70" />
+                    <span className="text-muted-foreground">File ID:</span>
                     <span className="ml-auto font-mono text-xs">
                       {analysis.file_id.slice(-8)}
                     </span>
                   </div>
 
                   <div className="flex items-center text-sm">
-                    <Hash className="h-4 w-4 mr-2 text-gray-400" />
-                    <span className="text-gray-600">Analysis ID:</span>
+                    <Hash className="h-4 w-4 mr-2 text-muted-foreground/70" />
+                    <span className="text-muted-foreground">Analysis ID:</span>
                     <span className="ml-auto font-mono text-xs">
                       {analysisId.slice(-8)}
                     </span>
@@ -563,7 +552,6 @@ export default function AnalysisResultPage() {
             </div>
           </div>
         ) : null}
-      </div>
-    </div>
+    </AppShell>
   );
 }

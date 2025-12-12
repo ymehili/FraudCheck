@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
+import Image from 'next/image';
 import { Camera, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -100,8 +101,8 @@ export function CameraCapture({ onCapture, className, disabled }: CameraCaptureP
     return (
       <Card className={cn('w-full max-w-lg mx-auto', className)}>
         <CardContent className="flex flex-col items-center justify-center p-6 text-center">
-          <Camera className="h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-gray-500">Camera capture is disabled</p>
+          <Camera className="h-12 w-12 text-muted-foreground/60 mb-4" />
+          <p className="text-muted-foreground">Camera capture is disabled</p>
         </CardContent>
       </Card>
     );
@@ -118,13 +119,15 @@ export function CameraCapture({ onCapture, className, disabled }: CameraCaptureP
             </Alert>
           )}
 
-          <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
+          <div className="relative aspect-video bg-muted/40 rounded-lg overflow-hidden">
             {capturedImage ? (
               // Show captured image
-              <img
+              <Image
                 src={capturedImage}
                 alt="Captured check"
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
+                unoptimized
               />
             ) : (
               // Show camera feed
@@ -152,10 +155,10 @@ export function CameraCapture({ onCapture, className, disabled }: CameraCaptureP
 
             {/* Loading overlay */}
             {!isReady && !error && !capturedImage && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+              <div className="absolute inset-0 flex items-center justify-center bg-muted/40">
                 <div className="text-center">
-                  <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2 animate-pulse" />
-                  <p className="text-gray-500">Initializing camera...</p>
+                  <Camera className="h-12 w-12 text-muted-foreground/60 mx-auto mb-2 animate-pulse" />
+                  <p className="text-muted-foreground">Initializing camera...</p>
                 </div>
               </div>
             )}
@@ -207,7 +210,7 @@ export function CameraCapture({ onCapture, className, disabled }: CameraCaptureP
           </div>
 
           {/* Instructions */}
-          <div className="mt-4 text-sm text-gray-600 text-center">
+          <div className="mt-4 text-sm text-muted-foreground text-center">
             {capturedImage ? (
               <p>Review your photo and confirm to proceed, or retake if needed.</p>
             ) : isReady ? (

@@ -8,14 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { NavigationBar } from '@/components/NavigationBar';
 import { CameraCapture } from '@/components/CameraCapture';
 import { FileUpload } from '@/components/FileUpload';
 import { useFileUpload } from '@/hooks/useFileUpload';
-import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { ROUTES, SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/lib/constants';
+import { ROUTES, ERROR_MESSAGES } from '@/lib/constants';
 import { FileUploadResponse } from '@/types/api';
+import { AppShell } from '@/components/AppShell';
 
 type UploadMethod = 'camera' | 'file' | null;
 
@@ -26,7 +25,6 @@ export default function UploadPage() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [analysisId, setAnalysisId] = useState<string | null>(null);
 
   const { uploadFile, isUploading, error: uploadError } = useFileUpload({
     onSuccess: handleUploadSuccess,
@@ -77,7 +75,6 @@ export default function UploadPage() {
         setAnalysisProgress(100);
         setIsAnalyzing(false);
         setAnalysisComplete(true);
-        setAnalysisId(analysisResult.result_url?.split('/').pop());
         
         setTimeout(() => {
           router.push(analysisResult.result_url || `${ROUTES.ANALYSIS}/${analysisResult.result_url?.split('/').pop()}`);
@@ -115,7 +112,6 @@ export default function UploadPage() {
             
             // Get the analysis result ID from the task result
             const resultId = statusData.result_id || statusData.result?.result_id;
-            setAnalysisId(resultId);
             
             setTimeout(() => {
               router.push(`${ROUTES.ANALYSIS}/${resultId}`);
@@ -177,15 +173,12 @@ export default function UploadPage() {
     setAnalysisProgress(0);
     setIsAnalyzing(false);
     setAnalysisComplete(false);
-    setAnalysisId(null);
   }, []);
 
   // Show analysis progress
   if (isUploading || isAnalyzing || analysisComplete) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <NavigationBar />
-        <div className="max-w-2xl mx-auto px-4 py-12">
+      <AppShell contentClassName="max-w-2xl">
           <Card>
             <CardHeader className="text-center">
               <CardTitle className="flex items-center justify-center space-x-2">
@@ -217,8 +210,8 @@ export default function UploadPage() {
             <CardContent className="space-y-6">
               {isUploading && (
                 <div className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                  <p className="text-gray-600">Uploading your file securely...</p>
+                  <div className="w-16 h-16 mx-auto mb-4 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                  <p className="text-muted-foreground">Uploading your file securely...</p>
                 </div>
               )}
               
@@ -232,11 +225,11 @@ export default function UploadPage() {
                   </div>
                   
                   {analysisProgress < 100 && (
-                    <div className="text-sm text-gray-600 space-y-2">
-                      {analysisProgress < 30 && <p>📸 Processing image quality...</p>}
-                      {analysisProgress >= 30 && analysisProgress < 60 && <p>🔍 Performing forensic analysis...</p>}
-                      {analysisProgress >= 60 && analysisProgress < 90 && <p>📝 Extracting text with OCR...</p>}
-                      {analysisProgress >= 90 && <p>⚖️ Applying fraud detection rules...</p>}
+                    <div className="text-sm text-muted-foreground space-y-2">
+                      {analysisProgress < 30 && <p>Processing image quality…</p>}
+                      {analysisProgress >= 30 && analysisProgress < 60 && <p>Performing forensic analysis…</p>}
+                      {analysisProgress >= 60 && analysisProgress < 90 && <p>Extracting text with OCR…</p>}
+                      {analysisProgress >= 90 && <p>Applying fraud detection rules…</p>}
                     </div>
                   )}
                   
@@ -258,20 +251,17 @@ export default function UploadPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavigationBar />
-      <div className="max-w-4xl mx-auto px-4 py-12">
+    <AppShell contentClassName="max-w-4xl">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-4">
             Upload Check for Analysis
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-muted-foreground">
             Choose how you&apos;d like to provide your check image for fraud detection analysis
           </p>
         </div>
@@ -288,8 +278,8 @@ export default function UploadPage() {
           <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
             <Card 
               className={cn(
-                "cursor-pointer transition-all hover:shadow-lg hover:scale-105",
-                "border-2 hover:border-blue-500"
+                "cursor-pointer border-2 transition-all",
+                "hover:border-primary/60 card-hover"
               )}
               onClick={() => setSelectedMethod('camera')}
             >
@@ -303,7 +293,7 @@ export default function UploadPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="text-sm text-gray-600 space-y-1">
+                <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Quick and convenient</li>
                   <li>• Real-time capture guidance</li>
                   <li>• Optimal for mobile devices</li>
@@ -313,8 +303,8 @@ export default function UploadPage() {
 
             <Card 
               className={cn(
-                "cursor-pointer transition-all hover:shadow-lg hover:scale-105",
-                "border-2 hover:border-blue-500"
+                "cursor-pointer border-2 transition-all",
+                "hover:border-primary/60 card-hover"
               )}
               onClick={() => setSelectedMethod('file')}
             >
@@ -328,7 +318,7 @@ export default function UploadPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="text-sm text-gray-600 space-y-1">
+                <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Support for JPG, PNG, PDF</li>
                   <li>• Drag and drop interface</li>
                   <li>• Up to 10MB file size</li>
@@ -359,11 +349,9 @@ export default function UploadPage() {
         )}
 
         {/* Instructions */}
-        <div className="mt-12 bg-blue-50 rounded-lg p-6">
-          <h3 className="text-lg font-medium text-blue-900 mb-4">
-            📋 Upload Guidelines
-          </h3>
-          <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
+        <div className="mt-12 rounded-xl border bg-card/60 p-6">
+          <h3 className="text-lg font-medium text-foreground mb-4">Upload Guidelines</h3>
+          <div className="grid md:grid-cols-2 gap-4 text-sm text-muted-foreground">
             <div>
               <h4 className="font-medium mb-2">For best results:</h4>
               <ul className="space-y-1">
@@ -384,7 +372,6 @@ export default function UploadPage() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }

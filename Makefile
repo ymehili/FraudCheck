@@ -1,4 +1,4 @@
-# CheckGuard Project Makefile
+# FraudCheck Project Makefile
 # This Makefile provides automation for the entire project setup and management
 
 .PHONY: help setup install-deps build up down restart logs clean test lint format \
@@ -16,7 +16,7 @@ BLUE=\033[0;34m
 NC=\033[0m # No Color
 
 # Project configuration
-PROJECT_NAME := checkguard
+PROJECT_NAME := FraudCheck
 COMPOSE_FILE := docker-compose.yml
 COMPOSE_PROD_FILE := docker-compose.prod.yml
 BACKUP_DIR := ./backups
@@ -24,7 +24,7 @@ LOG_DIR := ./logs
 
 ## Help
 help: ## Show this help message
-	@echo "$(BLUE)CheckGuard Project Management$(NC)"
+	@echo "$(BLUE)FraudCheck Project Management$(NC)"
 	@echo "$(BLUE)=============================$(NC)"
 	@echo ""
 	@echo "$(GREEN)Available commands:$(NC)"
@@ -38,7 +38,7 @@ help: ## Show this help message
 
 ## Setup and Installation
 setup: ## Initial project setup (run this first)
-	@echo "$(GREEN)Setting up CheckGuard project...$(NC)"
+	@echo "$(GREEN)Setting up FraudCheck project...$(NC)"
 	@echo "$(YELLOW)1. Checking dependencies...$(NC)"
 	@command -v docker >/dev/null 2>&1 || (echo "$(RED)Docker is not installed$(NC)" && exit 1)
 	@command -v docker-compose >/dev/null 2>&1 || (echo "$(RED)Docker Compose is not installed$(NC)" && exit 1)
@@ -46,6 +46,15 @@ setup: ## Initial project setup (run this first)
 	@echo "$(YELLOW)2. Creating necessary directories...$(NC)"
 	@mkdir -p $(BACKUP_DIR) $(LOG_DIR)
 	@echo "$(YELLOW)3. Setting up environment files...$(NC)"
+	@if [ ! -f .env.development ]; then \
+		if [ -f .env.development.template ]; then \
+			cp .env.development.template .env.development; \
+			echo "$(YELLOW)✓ Created .env.development from template$(NC)"; \
+			echo "$(RED)⚠ Please update .env.development with your real keys (Clerk/Gemini)$(NC)"; \
+		else \
+			echo "$(RED)⚠ .env.development.template not found; create .env.development manually$(NC)"; \
+		fi; \
+	fi
 	@if [ ! -f .env.production ]; then \
 		cp .env.production.template .env.production; \
 		echo "$(YELLOW)✓ Created .env.production from template$(NC)"; \
@@ -103,7 +112,7 @@ logs-db: ## Show database logs
 
 ## Development
 dev: ## Start development environment
-	@echo "$(GREEN)Starting CheckGuard development environment...$(NC)"
+	@echo "$(GREEN)Starting FraudCheck development environment...$(NC)"
 	@$(MAKE) up
 	@echo ""
 	@echo "$(GREEN)🚀 Development environment is ready!$(NC)"
@@ -116,7 +125,7 @@ dev: ## Start development environment
 	@echo "$(YELLOW)Use 'make logs' to see all logs or 'make down' to stop$(NC)"
 
 prod: ## Start production environment
-	@echo "$(GREEN)Starting CheckGuard production environment...$(NC)"
+	@echo "$(GREEN)Starting FraudCheck production environment...$(NC)"
 	@if [ ! -f .env.production ]; then \
 		echo "$(RED)Error: .env.production file not found$(NC)"; \
 		echo "$(YELLOW)Run 'make setup' first or copy .env.production.template to .env.production$(NC)"; \
@@ -156,7 +165,7 @@ db-reset: ## Reset database (WARNING: destroys all data)
 db-backup: ## Backup database
 	@echo "$(YELLOW)Creating database backup...$(NC)"
 	@mkdir -p $(BACKUP_DIR)
-	@docker-compose -f $(COMPOSE_FILE) exec -T postgres pg_dump -U checkguard checkguard > $(BACKUP_DIR)/backup_$(shell date +%Y%m%d_%H%M%S).sql
+	@docker-compose -f $(COMPOSE_FILE) exec -T postgres pg_dump -U FraudCheck FraudCheck > $(BACKUP_DIR)/backup_$(shell date +%Y%m%d_%H%M%S).sql
 	@echo "$(GREEN)✓ Database backup created in $(BACKUP_DIR)$(NC)"
 
 db-restore: ## Restore database from backup (specify BACKUP_FILE=filename)
@@ -170,7 +179,7 @@ db-restore: ## Restore database from backup (specify BACKUP_FILE=filename)
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Restoring database from $(BACKUP_FILE)...$(NC)"
-	@docker-compose -f $(COMPOSE_FILE) exec -T postgres psql -U checkguard -d checkguard < $(BACKUP_DIR)/$(BACKUP_FILE)
+	@docker-compose -f $(COMPOSE_FILE) exec -T postgres psql -U FraudCheck -d FraudCheck < $(BACKUP_DIR)/$(BACKUP_FILE)
 	@echo "$(GREEN)✓ Database restored from $(BACKUP_FILE)$(NC)"
 
 ## Testing
@@ -233,7 +242,7 @@ health: ## Check health of all services
 	@curl -f http://localhost:3000 2>/dev/null >/dev/null && echo "$(GREEN)✓ Frontend is healthy$(NC)" || echo "$(RED)✗ Frontend is not responding$(NC)"
 
 status: ## Show status of all services
-	@echo "$(BLUE)CheckGuard Service Status$(NC)"
+	@echo "$(BLUE)FraudCheck Service Status$(NC)"
 	@echo "$(BLUE)========================$(NC)"
 	@docker-compose -f $(COMPOSE_FILE) ps
 

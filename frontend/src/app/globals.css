@@ -118,5 +118,32 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-attachment: fixed;
+    background-image:
+      radial-gradient(900px circle at 12% -10%, oklch(0.66 0.18 255 / 18%), transparent 55%),
+      radial-gradient(700px circle at 85% 20%, oklch(0.78 0.14 190 / 14%), transparent 55%),
+      radial-gradient(900px circle at 50% 110%, oklch(0.75 0.16 320 / 10%), transparent 55%);
+  }
+}
+
+@layer utilities {
+  .app-shell {
+    @apply min-h-screen;
+  }
+
+  .app-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .app-section {
+    @apply py-10 sm:py-12;
+  }
+
+  .glass {
+    @apply bg-background/70 backdrop-blur-md border border-border/70 shadow-sm;
+  }
+
+  .card-hover {
+    @apply transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
   }
 }

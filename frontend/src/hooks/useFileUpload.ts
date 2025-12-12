@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { api } from '@/lib/api';
 import { FileUploadResponse } from '@/types/api';
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/lib/constants';
+import { ERROR_MESSAGES } from '@/lib/constants';
 
 interface UploadProgress {
   progress: number;
@@ -160,69 +160,5 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
     uploadedFile,
     reset,
     retry,
-  };
-}
-
-// Batch upload hook for multiple files
-export function useBatchFileUpload(options: UseFileUploadOptions = {}) {
-  const [uploads, setUploads] = useState<Map<string, UseFileUploadReturn>>(new Map());
-  const [totalProgress, setTotalProgress] = useState(0);
-  const [isAnyUploading, setIsAnyUploading] = useState(false);
-
-  const addUpload = useCallback((file: File) => {
-    const fileId = `${file.name}-${file.size}-${file.lastModified}`;
-    const uploadHook = useFileUpload({
-      ...options,
-      onSuccess: (response) => {
-        options.onSuccess?.(response);
-        updateTotalProgress();
-      },
-      onError: (error) => {
-        options.onError?.(error);
-        updateTotalProgress();
-      },
-    });
-
-    setUploads(prev => new Map(prev.set(fileId, uploadHook)));
-    uploadHook.uploadFile(file);
-
-    return fileId;
-  }, [options]);
-
-  const updateTotalProgress = useCallback(() => {
-    let totalProgress = 0;
-    let uploading = false;
-
-    uploads.forEach(upload => {
-      totalProgress += upload.progress;
-      if (upload.isUploading) uploading = true;
-    });
-
-    setTotalProgress(uploads.size > 0 ? totalProgress / uploads.size : 0);
-    setIsAnyUploading(uploading);
-  }, [uploads]);
-
-  const removeUpload = useCallback((fileId: string) => {
-    setUploads(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(fileId);
-      return newMap;
-    });
-  }, []);
-
-  const resetAll = useCallback(() => {
-    uploads.forEach(upload => upload.reset());
-    setUploads(new Map());
-    setTotalProgress(0);
-    setIsAnyUploading(false);
-  }, [uploads]);
-
-  return {
-    uploads: Array.from(uploads.entries()),
-    addUpload,
-    removeUpload,
-    resetAll,
-    totalProgress,
-    isAnyUploading,
   };
 }

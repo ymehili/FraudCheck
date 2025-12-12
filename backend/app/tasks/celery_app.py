@@ -3,7 +3,7 @@ from ..core.config import settings
 
 # Create Celery app instance
 celery_app = Celery(
-    "checkguard_tasks",
+    "FraudCheck_tasks",
     include=['app.tasks.analysis_tasks']
 )
 

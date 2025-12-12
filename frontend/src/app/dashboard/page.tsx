@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { NavigationBar } from '@/components/NavigationBar';
 import { RiskScoreChart } from '@/components/RiskScoreChart';
 import { FilterControls } from '@/components/FilterControls';
+import type { FilterState } from '@/components/FilterControls';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -12,10 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { 
   TrendingUp, 
   TrendingDown, 
-  Users, 
   FileText, 
   AlertTriangle,
-  CheckCircle,
   Clock,
   Plus
 } from 'lucide-react';
@@ -24,24 +22,21 @@ import { DashboardStats } from '@/types/api';
 import { formatNumber, formatPercentage, cn, formatRiskScore } from '@/lib/utils';
 import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
 import Link from 'next/link';
-
-interface DashboardFilters {
-  start_date?: string;
-  end_date?: string;
-  min_risk_score?: number;
-  max_risk_score?: number;
-  status?: string;
-  search?: string;
-}
+import { AppShell } from '@/components/AppShell';
 
 export default function DashboardPage() {
   const { getToken } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<DashboardFilters>({});
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: { start: '', end: '' },
+    riskScore: { min: 0, max: 100 },
+    status: 'all',
+    search: '',
+  });
 
-  const fetchDashboardStats = async (currentFilters: DashboardFilters = {}) => {
+  const fetchDashboardStats = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -51,7 +46,7 @@ export default function DashboardPage() {
         throw new Error('Authentication token not available');
       }
 
-      const dashboardData = await api.getDashboardStats(token, currentFilters);
+      const dashboardData = await api.getDashboardStats(token);
       setStats(dashboardData);
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
@@ -59,48 +54,25 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getToken]);
 
   useEffect(() => {
-    fetchDashboardStats(filters);
-  }, []);
+    fetchDashboardStats();
+  }, [fetchDashboardStats]);
 
-  const handleFiltersChange = (newFilters: Record<string, unknown>) => {
-    // Convert filter format from FilterControls to API format
-    const apiFilters: DashboardFilters = {};
-    
-    if (newFilters.dateRange?.start) {
-      apiFilters.start_date = newFilters.dateRange.start;
-    }
-    if (newFilters.dateRange?.end) {
-      apiFilters.end_date = newFilters.dateRange.end;
-    }
-    if (newFilters.riskScore?.min !== undefined && newFilters.riskScore.min > 0) {
-      apiFilters.min_risk_score = newFilters.riskScore.min;
-    }
-    if (newFilters.riskScore?.max !== undefined && newFilters.riskScore.max < 100) {
-      apiFilters.max_risk_score = newFilters.riskScore.max;
-    }
-    if (newFilters.status && newFilters.status !== 'all') {
-      apiFilters.status = newFilters.status;
-    }
-    if (newFilters.search) {
-      apiFilters.search = newFilters.search;
-    }
-    
-    setFilters(apiFilters);
-    fetchDashboardStats(apiFilters);
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters);
+    // Dashboard stats endpoint currently returns global stats; refresh to keep UX responsive.
+    fetchDashboardStats();
   };
 
   const handleRefresh = () => {
-    fetchDashboardStats(filters);
+    fetchDashboardStats();
   };
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <NavigationBar />
-        <div className="max-w-7xl mx-auto px-4 py-12">
+      <AppShell>
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -115,23 +87,19 @@ export default function DashboardPage() {
               </Button>
             </AlertDescription>
           </Alert>
-        </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavigationBar />
-      
-      <div className="max-w-7xl mx-auto px-4 py-12">
+    <AppShell>
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-2">
               Dashboard
             </h1>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-muted-foreground">
               Monitor fraud detection analytics and system performance
             </p>
           </div>
@@ -318,7 +286,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {stats?.recent_analyses?.slice(0, 5).map((analysis) => (
+                  {(stats?.recent_analyses ?? []).slice(0, 5).map((analysis) => (
                     <div key={analysis.analysis_id} className="flex items-center space-x-3">
                       <div className={cn(
                         "w-2 h-2 rounded-full",
@@ -327,10 +295,10 @@ export default function DashboardPage() {
                         "bg-green-500"
                       )} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-foreground truncate">
                           Analysis #{analysis.analysis_id.slice(-8)}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground">
                           Risk Score: {formatRiskScore(analysis.risk_score)} • {new Date(analysis.created_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -338,10 +306,11 @@ export default function DashboardPage() {
                         <Button variant="ghost" size="sm">View</Button>
                       </Link>
                     </div>
-                  )) || (
+                  ))}
+                  {(stats?.recent_analyses ?? []).length === 0 && (
                     <div className="text-center py-8">
-                      <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">No recent analyses found</p>
+                      <FileText className="h-12 w-12 text-muted-foreground/60 mx-auto mb-4" />
+                      <p className="text-muted-foreground">No recent analyses found</p>
                       <Link href={ROUTES.UPLOAD}>
                         <Button variant="outline" className="mt-4">
                           Start First Analysis
@@ -388,7 +357,6 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </AppShell>
   );
 }

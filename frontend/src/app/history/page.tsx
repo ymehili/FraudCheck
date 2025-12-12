@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { NavigationBar } from '@/components/NavigationBar';
 import { FilterControls } from '@/components/FilterControls';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,10 +28,12 @@ import {
 } from 'lucide-react';
 import { usePDFGenerator } from '@/components/PDFGenerator';
 import { api } from '@/lib/api';
-import { AnalysisHistoryItem, PaginatedResponse } from '@/types/api';
+import { AnalysisHistoryItem } from '@/types/api';
 import { formatDate, getRiskLevel, cn } from '@/lib/utils';
 import { ROUTES, RISK_THRESHOLDS } from '@/lib/constants';
 import Link from 'next/link';
+import { AppShell } from '@/components/AppShell';
+import type { FilterState } from '@/components/FilterControls';
 
 interface HistoryFilters {
   start_date?: string;
@@ -40,6 +41,7 @@ interface HistoryFilters {
   min_risk_score?: number;
   max_risk_score?: number;
   status?: string;
+  [key: string]: string | number | undefined;
 }
 
 export default function HistoryPage() {
@@ -55,9 +57,15 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<HistoryFilters>({});
+  const [filterState, setFilterState] = useState<FilterState>({
+    dateRange: { start: '', end: '' },
+    riskScore: { min: 0, max: 100 },
+    status: 'all',
+    search: '',
+  });
   const [showFilters, setShowFilters] = useState(false);
 
-  const fetchAnalysisHistory = async (
+  const fetchAnalysisHistory = useCallback(async (
     page: number = 1, 
     currentFilters: HistoryFilters = {}
   ) => {
@@ -90,15 +98,24 @@ export default function HistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getToken, pagination.size]);
 
   useEffect(() => {
-    fetchAnalysisHistory(1, filters);
-  }, []);
+    fetchAnalysisHistory(1, {});
+  }, [fetchAnalysisHistory]);
 
-  const handleFiltersChange = (newFilters: HistoryFilters) => {
-    setFilters(newFilters);
-    fetchAnalysisHistory(1, newFilters);
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilterState(newFilters);
+    const apiFilters: HistoryFilters = {};
+
+    if (newFilters.dateRange.start) apiFilters.start_date = newFilters.dateRange.start;
+    if (newFilters.dateRange.end) apiFilters.end_date = newFilters.dateRange.end;
+    if (newFilters.riskScore.min > 0) apiFilters.min_risk_score = newFilters.riskScore.min;
+    if (newFilters.riskScore.max < 100) apiFilters.max_risk_score = newFilters.riskScore.max;
+    if (newFilters.status && newFilters.status !== 'all') apiFilters.status = newFilters.status;
+
+    setFilters(apiFilters);
+    fetchAnalysisHistory(1, apiFilters);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -152,9 +169,7 @@ export default function HistoryPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <NavigationBar />
-        <div className="max-w-7xl mx-auto px-4 py-12">
+      <AppShell>
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -169,23 +184,19 @@ export default function HistoryPage() {
               </Button>
             </AlertDescription>
           </Alert>
-        </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavigationBar />
-      
-      <div className="max-w-7xl mx-auto px-4 py-12">
+    <AppShell>
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-2">
               Analysis History
             </h1>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-muted-foreground">
               View and manage all your check analysis results
             </p>
           </div>
@@ -220,10 +231,10 @@ export default function HistoryPage() {
               </CardHeader>
               <CardContent>
                 <FilterControls
-                  filters={filters}
+                  filters={filterState}
                   onFiltersChange={handleFiltersChange}
                   isLoading={isLoading}
-                  showStatusFilter={true}
+                  showStatus={true}
                 />
               </CardContent>
             </Card>
@@ -363,10 +374,10 @@ export default function HistoryPage() {
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8">
                         <div className="flex flex-col items-center space-y-4">
-                          <FileText className="h-12 w-12 text-gray-400" />
+                          <FileText className="h-12 w-12 text-muted-foreground/60" />
                           <div>
-                            <p className="text-lg font-medium text-gray-900">No analyses found</p>
-                            <p className="text-gray-500">
+                            <p className="text-lg font-medium text-foreground">No analyses found</p>
+                            <p className="text-muted-foreground">
                               {Object.keys(filters).length > 0 
                                 ? 'Try adjusting your filters or start a new analysis'
                                 : 'Start your first check analysis'
@@ -414,7 +425,6 @@ export default function HistoryPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </AppShell>
   );
 }

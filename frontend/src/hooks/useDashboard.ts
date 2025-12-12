@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { api } from '@/lib/api';
-import { DashboardStats, AnalysisHistoryItem, PaginatedResponse } from '@/types/api';
+import { DashboardStats, AnalysisHistoryItem } from '@/types/api';
 import { FilterState } from '@/components/FilterControls';
 
 interface UseDashboardOptions {

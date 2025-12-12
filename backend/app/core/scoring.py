@@ -1,5 +1,5 @@
 """
-Risk scoring logic for CheckGuard AI fraud detection.
+Risk scoring logic for FraudCheck AI fraud detection.
 
 This module provides comprehensive risk scoring functionality that evaluates
 forensic analysis results, OCR data, and rule engine violations to produce

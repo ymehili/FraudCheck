@@ -1,5 +1,5 @@
 #!/bin/bash
-# Database Initialization Script for CheckGuard
+# Database Initialization Script for FraudCheck
 # This script waits for the database to be ready and runs initial setup
 
 set -e
@@ -10,11 +10,11 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${YELLOW}🔄 Initializing CheckGuard database...${NC}"
+echo -e "${YELLOW}🔄 Initializing FraudCheck database...${NC}"
 
 # Wait for PostgreSQL to be ready
 echo -e "${YELLOW}⏳ Waiting for PostgreSQL to be ready...${NC}"
-while ! pg_isready -h postgres -p 5432 -U checkguard; do
+while ! pg_isready -h postgres -p 5432 -U FraudCheck; do
     echo -e "${YELLOW}   PostgreSQL is not ready yet, waiting...${NC}"
     sleep 2
 done

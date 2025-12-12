@@ -1,5 +1,5 @@
 #!/bin/bash
-# Backend Entrypoint Script for CheckGuard
+# Backend Entrypoint Script for FraudCheck
 # This script handles initialization and starts the backend service
 
 set -e
@@ -10,10 +10,11 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${YELLOW}🚀 Starting CheckGuard Backend...${NC}"
+echo -e "${YELLOW}🚀 Starting FraudCheck Backend...${NC}"
 
-# If this is the first run or if INIT_DB is set, run initialization
-if [ "$INIT_DB" = "true" ] || [ ! -f /app/.initialized ]; then
+# Only run initialization when explicitly requested (prevents celery/flower containers
+# from redundantly running migrations and S3 init on first boot).
+if [ "$INIT_DB" = "true" ]; then
     echo -e "${YELLOW}🔧 Running initialization...${NC}"
     
     # Run database initialization script
@@ -28,7 +29,7 @@ if [ "$INIT_DB" = "true" ] || [ ! -f /app/.initialized ]; then
     touch /app/.initialized
     echo -e "${GREEN}✅ Initialization completed${NC}"
 else
-    echo -e "${YELLOW}⏭️ Skipping initialization (already done)${NC}"
+    echo -e "${YELLOW}⏭️ Skipping initialization (INIT_DB not set)${NC}"
 fi
 
 echo -e "${GREEN}🌟 Starting FastAPI server...${NC}"

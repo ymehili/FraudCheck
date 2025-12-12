@@ -296,7 +296,7 @@ Desktop.ini
 *.swo
 
 # Project specific
-checkguard.log
+FraudCheck.log
 analysis_results/
 temp_uploads/
 processed_files/

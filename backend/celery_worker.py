@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Celery worker entry point for CheckGuard AI.
+Celery worker entry point for FraudCheck AI.
 
 This script starts a Celery worker that processes background analysis tasks.
 """
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Start the Celery worker."""
-    logger.info("Starting CheckGuard Celery worker...")
+    logger.info("Starting FraudCheck Celery worker...")
     
     # Worker configuration
     worker_args = [

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "CheckGuard AI fraud detection rules configuration",
+  "description": "FraudCheck AI fraud detection rules configuration",
   "category_weights": {
     "forensics": 0.4,
     "ocr": 0.3,
@@ -305,6 +305,6 @@
     "created_date": "2024-01-01",
     "last_updated": "2024-01-01",
     "version": "1.0",
-    "author": "CheckGuard AI Team"
+    "author": "FraudCheck AI Team"
   }
 }

@@ -45,7 +45,7 @@ export function FileUpload({
     setError(null);
 
     // Check file type
-    if (!SUPPORTED_FILE_TYPES.includes(file.type as string)) {
+    if (!(SUPPORTED_FILE_TYPES as readonly string[]).includes(file.type)) {
       setError(`${ERROR_MESSAGES.INVALID_FILE_TYPE}. Supported formats: JPG, PNG, PDF`);
       return false;
     }
@@ -172,8 +172,8 @@ export function FileUpload({
       <Card
         className={cn(
           'border-2 border-dashed transition-colors',
-          dragActive && !disabled ? 'border-blue-500 bg-blue-50' : 'border-gray-300',
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'
+          dragActive && !disabled ? 'border-primary/70 bg-primary/5' : 'border-border/70',
+          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-border'
         )}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -196,12 +196,12 @@ export function FileUpload({
           {selectedFile && !isUploading ? (
             /* Selected file display */
             <div className="w-full">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/40 rounded-lg">
                 <div className="flex items-center space-x-3">
                   {getFileIcon(selectedFile)}
                   <div className="text-left">
-                    <p className="font-medium text-gray-900">{selectedFile.name}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-sm text-muted-foreground">
                       {formatFileSize(selectedFile.size)}
                     </p>
                   </div>
@@ -222,25 +222,25 @@ export function FileUpload({
             /* Upload progress */
             <div className="w-full">
               <Upload className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-              <p className="text-lg font-medium text-gray-900 mb-2">Uploading...</p>
-              <p className="text-sm text-gray-600 mb-4">{selectedFile?.name}</p>
+              <p className="text-lg font-medium text-foreground mb-2">Uploading...</p>
+              <p className="text-sm text-muted-foreground mb-4">{selectedFile?.name}</p>
               <Progress value={uploadProgress} className="w-full" />
-              <p className="text-sm text-gray-500 mt-2">{uploadProgress}% complete</p>
+              <p className="text-sm text-muted-foreground mt-2">{uploadProgress}% complete</p>
             </div>
           ) : (
             /* Upload area */
             <div>
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <Upload className="h-12 w-12 text-muted-foreground/60 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
                 {dragActive ? 'Drop your file here' : 'Upload a check image or PDF'}
               </h3>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 Drag and drop your file here, or click to browse
               </p>
               <Button type="button" variant="outline" disabled={disabled}>
                 Choose File
               </Button>
-              <div className="mt-4 text-xs text-gray-500">
+              <div className="mt-4 text-xs text-muted-foreground">
                 <p>Supported formats: JPG, PNG, PDF</p>
                 <p>Maximum file size: {formatFileSize(maxSize)}</p>
               </div>
