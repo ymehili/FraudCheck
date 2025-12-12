@@ -407,3 +407,4 @@ For issues, questions, or contributions, please open an issue on GitHub or conta
 
 **Built with ❤️ for secure financial document verification**
 
+
