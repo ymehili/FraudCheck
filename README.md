@@ -1,8 +1,8 @@
-# CheckGuard
+# FraudCheck
 
 **Advanced Document Fraud Detection & Analysis System**
 
-CheckGuard is a comprehensive document forensics and fraud detection platform that uses AI, image analysis, and malware scanning to verify the authenticity of checks and other financial documents. The system provides real-time analysis with detailed risk scoring and forensic reports.
+FraudCheck is a comprehensive document forensics and fraud detection platform that uses AI, image analysis, and malware scanning to verify the authenticity of checks and other financial documents. The system provides real-time analysis with detailed risk scoring and forensic reports.
 
 ## 📹 Demo Video
 
@@ -131,8 +131,8 @@ This video demonstrates the full workflow including document upload, real-time a
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/CheckGuard.git
-cd CheckGuard
+git clone https://github.com/yourusername/FraudCheck.git
+cd FraudCheck
 ```
 
 ### 2. Set Up Environment Variables
@@ -298,7 +298,7 @@ celery -A app.tasks.celery_app flower
 ## 📁 Project Structure
 
 ```
-CheckGuard/
+FraudCheck/
 ├── backend/                    # FastAPI backend
 │   ├── app/
 │   │   ├── api/               # API routes
